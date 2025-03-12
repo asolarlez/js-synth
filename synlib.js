@@ -6,12 +6,13 @@ function debugRandom() {
     //randstate = randstate % 1091;
     //let rv = (randstate) / 1091;
     //console.log(rv);
-    randstate = Math.sin(randstate) * 10000;
-    return randstate - Math.floor(randstate);
-    //return rv;
+    randstate = Math.sin(randstate) * 5000;
+    let rv = randstate - Math.floor(randstate);
+    //console.log(rv);
+    return rv;
 }
 
-//Math.random = debugRandom;
+Math.random = debugRandom;
 
 
 let NOVALUE = "NOVAL@#";
@@ -64,7 +65,11 @@ function holify(prog, childIdx) {
                     }                    
                 });
                 if (changed) {
-                    return new FunN(node.name, node.imp, node.absfun, newargs);
+                    let rv = new FunN(node.name, node.imp, node.absfun, newargs);
+                    if (newargs.length == 0) {
+                        rv.childstate = st.transition(node.state, rv, 0);
+                    }
+                    return rv.setState(node.state);
                 } else {
                     return node;
                 }
@@ -72,7 +77,7 @@ function holify(prog, childIdx) {
             if (node instanceof LambdaN) {
                 let newbody = traverse(node.body, lvl+1);
                 if (newbody != node.body) {
-                    return new LambdaN(newbody);
+                    return (new LambdaN(newbody)).setState(node.state);
                 } else {
                     return node;
                 }
@@ -344,9 +349,31 @@ class AST {
     traverse(enter, reenter, end) {
 
     }
+    setState(state) {
+        this.state = state;
+        return this;
+    }
 }
 
 
+class Root extends AST {
+    constructor() {
+        super("root");
+        this.prog = undefined;
+    }
+    temp(prog) {
+        this.prog = prog;
+        return this;
+    }
+    traverse(enter, reenter, end) {
+        if (enter) { enter(this); }
+        if (this.prog) {
+            this.prog.traverse(enter, reenter, end);
+        }        
+    }    
+}
+
+ROOT = new Root();
 
 class FunN extends AST {
     constructor(name, imp, abstract, args) {
@@ -601,9 +628,182 @@ function getLabel(node, stage) {
     if (kind == "input") {
         kind = kind + "/" + node.name;
     }
-    kind += "/" + stage;
+    if (stage != undefined) {
+        kind += "/" + stage;
+    }
     return kind;
 }
+
+function stateToStr(state){
+    return state.depth + ":" + state.grandpa + ":" + state.parent + ":" + state.idx;
+}
+
+function nextStateToStr(state, node, idx) {
+    return (state.depth+1)+":"+state.parent+":"+getLabel(node)+":"+idx;
+}
+
+
+class StatsTracker {
+    constructor() {
+        this.tracker = {};
+    }
+
+    randomConstruct(state, language, extras) {
+        let tstate;
+        let key = stateToStr(state);
+        if (key in this.tracker) {
+            tstate = this.tracker[key];
+        }
+        if (tstate && tstate.visits > 40) {            
+            let rnd = Math.random();            
+            
+            let scores = this.succScores(state, language, extras);
+            let total = scores[1];
+            scores = scores[0];
+            let tally = 0;
+            let i = 0;
+            for (i = 0; i < language.length; ++i) {
+                tally += scores[i];
+                if (tally/total > rnd) {
+                    return language[i];
+                }
+            }
+            if (extras) {
+                for (let j = 0; j < extras.length; ++j) {
+                    tally += scores[i];
+                    ++i;
+                    if (tally / total > rnd) {
+                        return extras[j];
+                    }
+                }
+            }
+            console.log("WTF!!!!");
+        } else {
+            let el = 0;
+            if (extras) {
+                el = extras.length;
+            }
+            let idx = Math.floor(Math.random() * (language.length + el));
+            return idx >= language.length ? extras[idx - language.length] : language[idx];
+        }        
+    }
+
+    succScores(state, language, extras) {
+        let rv = [];
+        let total = 0;
+        function rescale(score) {
+            return (Math.tanh(score / 100) + 1) / 2;
+        }
+        for (let i = 0; i < language.length; ++i) {
+            let construct = language[i];
+            let sz = construct.nargs || 0;
+            sz = Math.max(sz, 1);
+            let totreward = 0;
+            for (let j = 0; j < sz; ++j) {
+                let key = nextStateToStr(state, construct, j);
+                let tstate = this.tracker[key];
+                if (tstate) { 
+                    totreward += rescale(tstate.reward);
+                }
+            }     
+            totreward = totreward / sz;
+            total += totreward;
+            rv.push(totreward);
+        }
+        for (let i = 0; i < extras.length; ++i) {
+            let construct = extras[i];
+            let key = nextStateToStr(state, construct, 0);
+            let tstate = this.tracker[key];
+            let totreward=0;
+            if (tstate) {
+                totreward = rescale(tstate.reward);
+            }
+            total += totreward;
+            rv.push(totreward);
+        }
+        return [rv, total];
+        
+    }
+
+    startState() {
+        return {parent:"START", grandpa:"", idx:0, depth:0}; 
+    }
+    trackAction(state, node) {
+        let key = stateToStr(state);
+        let action = getLabel(node);
+        if (key in this.tracker) {
+            let tr = this.tracker[key];
+            tr.visits++;
+            if (action in tr.actions) {
+                tr.actions[action]++;
+            } else {
+                tr.actions[action] = 1;
+            }
+        } else {
+            let tr = {
+                visits: 1, reward: 0, scores: 0, actions: {}
+            }
+            tr.actions[action] = 1;
+            this.tracker[key] = tr;
+        }
+    }
+    transition(state, node, childidx) {
+        childidx = childidx || 0;
+        let action = getLabel(node);
+        
+        return { parent: action , grandpa: state.parent, idx: childidx, depth: state.depth+1, pred:state };
+    }
+    failedAction(state, action) {
+        //console.log(stateToStr(state), getLabel(action));
+    }
+    scoreTree(node, score) {
+        let tracker = this.tracker;
+        function scoreF(key) {
+            if (key in tracker) {
+                let q = tracker[key];
+                q.reward = (q.reward * q.scores + score) / (q.scores + 1);
+                q.scores++;
+            } else {
+                let tr = {
+                    visits: 1, reward: score, scores: 1, actions: {}
+                };
+                tracker[key] = tr;
+            }
+        }
+        node.traverse((n) => {
+            let key = stateToStr(n.state);
+            scoreF(key);
+            if (n.childstate) {
+                key = stateToStr(n.childstate);
+                scoreF(key);
+            }
+        });
+    }
+    failedState(state) {
+        let score = -100;
+        let tracker = this.tracker;
+        function scoreF(key) {
+            if (key in tracker) {
+                let q = tracker[key];
+                q.reward = (q.reward * q.scores + score) / (q.scores + 1);
+                q.scores++;
+            } else {
+                let tr = {
+                    visits: 1, reward: score, scores: 1, actions: {}
+                };
+                tracker[key] = tr;
+            }
+        }
+        let key = stateToStr(state);
+        scoreF(key);
+        if (state.pred) {
+            this.failedState(state.pred);
+        }
+    }
+}
+
+
+
 
 class ConstraintChecker {
     constructor() {
@@ -631,7 +831,10 @@ class ConstraintChecker {
 
 
 
-    addConstraint(badRes, envt) {
+    addConstraint(badRes, envt, limit) {
+        if (limit == undefined) {
+            limit = 1000;
+        }
         
         let lst = [];
         
@@ -685,6 +888,10 @@ class ConstraintChecker {
             }
         }
         lst[lastEnter].endpt = true;
+
+        if (lastEnter > limit) {
+            return;
+        }
         
         lst = lst.slice(0, lastEnter + 1);
         
@@ -840,20 +1047,19 @@ class ConstraintChecker {
 
 function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N) {
     let cc = new ConstraintChecker();
-    function randomProgram(language, bound, extras, localenv) {
-        
+    let st = new StatsTracker();
+    function randomProgram(language, bound, extras, localenv, state) {
+        if (state == undefined) {
+            state = st.startState();
+        }
         function randomConstruct() {
-            let el = 0;
-            if (extras) {
-                el = extras.length;
-            }
-            let idx = Math.floor(Math.random() * (language.length + el));
-            return idx >= language.length ? extras[idx - language.length] : language[idx];
+            return st.randomConstruct(state, language, extras);
         }
         
         let construct = randomConstruct(); 
         if (bound <= 0) {
             while (construct.kind == "lambda" || construct.kind == "fun") {
+                st.failedAction(state, construct);
                 construct = randomConstruct(); 
             }
         }
@@ -861,20 +1067,23 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
         let chk = cc.checkStep(construct,  localenv);
         let i = 0;
         while (!chk && i < 5) {
+            st.failedAction(state, construct);
             ++i;
             construct = randomConstruct();
             if (bound <= 0) {
                 while (construct.kind == "lambda" || construct.kind == "fun") {
+                    st.failedAction(state, construct);
                     construct = randomConstruct();
                 }
             }
             chk = cc.checkStep(construct, localenv);
         }
         if (!chk) {
+            st.failedState(state);
             return new Error(0);
         }
         let oldState;
-
+        
 
         function failedReturn(err) {
             if (err.narg == 0) {
@@ -883,7 +1092,7 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                 let mr = Math.random();                
                 if (mr > 1 / Math.pow(2, bound)) {
                     cc.retract(oldState);
-                    return randomProgram(language, bound, extras, localenv);
+                    return randomProgram(language, bound, extras, localenv, state);
                 } else {
                     return new Error(err.narg + 1);
                 }
@@ -896,11 +1105,17 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
             let n = construct.nargs;
             let args = [];
             let rv = new FunN(construct.name, construct.imp, construct.abstract, args);
+            rv.state = state;
             oldState = cc.advance(rv, localenv);
+            st.trackAction(state, rv);
+            if (n == 0) {
+                rv.childstate = st.transition(state, rv, 0);
+            }
             for (let i = 0; i < n; ++i) {
-                let arg = randomProgram(language, bound - 1, extras, localenv);
+                let newstate = st.transition(state, rv, i);
+                let arg = randomProgram(language, bound - 1, extras, localenv, newstate);
                 cc.goback(rv);
-                if (arg instanceof Error) {
+                if (arg instanceof Error) {                    
                     return failedReturn(arg);
                 }
                 args.push(arg);
@@ -911,6 +1126,8 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
         if (construct.kind == "int") {
             let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
             let rv = new IntN(randval); 
+            rv.state = state;
+            rv.childstate = st.transition(state, rv, 0);
             oldState = cc.advance(rv, localenv);
             return rv;
         }
@@ -925,22 +1142,34 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                 args = [new deBroujin(0)];
             }
             let rv = new LambdaN(HOLE);
+            rv.state = state;
             oldState = cc.advance(rv, localenv);
-            let body = randomProgram(language, bound - 1, args);
+            st.trackAction(state, rv);
+            let newstate = st.transition(state, rv, 0);
+            let body = randomProgram(language, bound - 1, args, undefined, newstate);
             cc.goback(rv);
             rv.body = body;
             if (body instanceof Error) {
+                
                 return failedReturn(body);
             }
             return rv;
         }
         if (construct.kind == "input") {
             oldState = cc.advance(construct, localenv);
-            return new InputN(construct.name);
+            let rv = new InputN(construct.name);
+            rv.setState(state);
+            rv.childstate = st.transition(state, rv, 0);
+            st.trackAction(state, rv);
+            return rv;
         }
         if (construct.kind == "index") {
-            oldState = cc.advance(construct, localenv);
-            return construct;
+            let rv = new deBroujin(construct.idx);
+            oldState = cc.advance(rv, localenv);
+            st.trackAction(state, rv);
+            rv.setState(state);
+            rv.childstate = st.transition(state, rv, 0);
+            return rv;
         }        
     }
 
@@ -1016,8 +1245,8 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                 cc.advance(prog.args[i]);
                 cc.goback(prog);
             }
-
-            let replacement = randomProgram(language, bound - 1, []);
+            st.trackAction(prog.state, prog);
+            let replacement = randomProgram(language, bound - 1, [], st.transition(prog.state, prog, lidx));
             if (replacement instanceof Error) {
                 console.log("randomizeLocalizedError1 FAILED")
                 return false;
@@ -1037,7 +1266,8 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
         }
         let idx = -1;
         let newEnvt = badRes.envt.map((x) => { ++idx; return new deBroujin(idx); });
-        let replacement = randomProgram(language, badRes.level - 1, newEnvt, badRes.envt);
+        st.trackAction(badRes.main.state, badRes.main);
+        let replacement = randomProgram(language, badRes.level - 1, newEnvt, badRes.envt, st.transition(badRes.main.state, badRes.main, badRes.child_idx));
         if (replacement instanceof Error) {
             //Local fix did not work. We need a more global fix. We'll try replacing the parent.
             cc.reset();
@@ -1047,7 +1277,8 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                     cc.advance(badRes.parent.args[i]);
                     cc.goback(badRes.parent);
                 }
-                let replacement2 = randomProgram(language, badRes.level, newEnvt, badRes.envt);
+                st.trackAction(badRes.parent.state, badRes.parent);
+                let replacement2 = randomProgram(language, badRes.level, newEnvt, badRes.envt, st.transition(badRes.parent.state, badRes.parent, badRes.parent_idx));
                 if (replacement2 instanceof Error) {                    
                     if (prog instanceof FunN) {                        
                         for (let i = 0; i<5; ++i) {
@@ -1088,10 +1319,12 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
 
     function runAndFix(language, examples, prog, bound, budget) {
         let bestSolution = undefined;
+        let bestOutput = undefined;
         let bestScore = 100000;//score is an error, so bigger is worse.
         let out = runOrLocalize(examples, prog, bound);
         while (budget > 0) {
             if (isBadResult(out)) {
+                st.scoreTree(prog, -100);
                 //In this case, an error was localized to an AST node.
                 //Always re-randomize the AST node with the error.                
                 console.log(budget + " Bad candidate          ", prog.print());
@@ -1103,15 +1336,18 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
 
             } else {
                 let score = scoreOutputs(examples, out)
+                st.scoreTree(prog, (1 - score) * 100);
                 console.log(budget + " Score:", score, prog.print());
                 if (score < threshold) {
                     //All outputs correct enough, we are done!
                     return prog;
                 } else {
+                    cc.addConstraint(ROOT.temp(prog), [], 10);
                     if (score < bestScore || (score == bestScore && Math.random() > 0.75)) {
                         //If we are better than the best score, we don't want to lose this solution.
                         bestScore = score;
                         bestSolution = prog;
+                        bestOutput = out;
                         console.log("New best solution", score, bestSolution.print());
                     }
                     console.log("Before randomization", prog.print());
@@ -1120,82 +1356,21 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                     --budget;
                     out = runOrLocalize(examples, newprog, bound);
                     if (isBadResult(out)) {
+                        st.scoreTree(newprog, -100);
                         prog = newprog;//make prog now equal the new prog and go back to the start of the loop.
                     } else {
                         //
                         let newscore = scoreOutputs(examples, out);
+                        st.scoreTree(newprog, (1-newscore)*100);
                         if (newscore <= score) {
                             //At least we made an improvement; make prog = newprog and keep improving.
                             console.log("New candidate", score, newprog.print());
                             prog = newprog;
                         } else {                            
-                            prog = bestSolution; //could bestSolution be undefined? No.                            
+                            prog = bestSolution; //could bestSolution be undefined? No.  
+                            out = bestOutput;
                         }
                     }
-                }
-            }
-        }
-        return bestSolution;
-    }
-
-    function runAndFix2(language, examples, prog, bound, budget) {
-        let bestSolution = undefined;
-        let bestScore = 100000;//score is an error, so bigger is worse.
-        //console.log("Testing ", prog.print());
-        let out = runOrLocalize(examples, prog, bound);
-        while (budget > 0) {                       
-            if (isBadResult(out)) {
-                //In this case, an error was localized to an AST node.
-                //Always re-randomize the AST node with the error.                
-                randomizeLocalizedError(language, prog, out, bound);//in-place mutation of prog.
-                console.log("Candidate:", prog.print());
-                //Could it ever modify bestProg? no, because bestProg works, and this only runs if prog doesn't work.
-                --budget;
-                out = runOrLocalize(examples, prog, bound);
-                
-            } else {
-                //console.log(out);
-                //In this case, the program produced all valid outputs, which must be checked
-                //against the real outputs.
-                let score = scoreOutputs(examples, out)
-                console.log("Score:", score, prog.print());
-                if (score < threshold) {
-                    //All outputs correct enough, we are done!
-                    return prog;
-                } else {
-                    //Some outputs are incorrect. Keep making random steps until the score improves or you exhaust the budget.
-                    
-                    if (score < bestScore) {
-                        //If we are better than the best score, we don't want to lose this solution.
-                        bestScore = score;
-                        bestSolution = prog;
-                        console.log("New best solution", score, bestSolution.print());
-                    }
-                    console.log("Before randomization", prog.print());
-                    let newprog = randomizeClone(language, prog, bound);
-                    console.log("After randomization", newprog.print());
-                    --budget;
-                    out = runOrLocalize(examples, newprog, bound);
-                    if (isBadResult(out)) {
-                        prog = newprog;//make prog now equal the new prog and go back to the start of the loop.
-                    } else {
-                        //
-                        let newscore = scoreOutputs(examples, out);
-                        if (newscore < score) {
-                            //At least we made an improvement; make prog = newprog and keep improving.
-                            console.log("New candidate", score, newprog.print());
-                            prog = newprog;
-                        } else {
-                            // no improvement, go back to the best solution and start again.
-                            if (bestScore == newscore && Math.random() > 0.75) {
-                                console.log("New candidate", score, newprog.print());
-                                prog = newprog;
-                            } else {
-                                prog = bestSolution; //could bestSolution be undefined? No.
-                            }                            
-                        }
-                    }
-                    
                 }
             }
         }
@@ -1233,7 +1408,12 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                         
                     });
                     if (changed) {
-                        return new FunN(node.name, node.imp, node.absfun, newargs);
+                        let rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                        if (newargs.length == 0) {
+                            rv.childstate = st.transition(node.state, rv, 0);
+                        }
+                        return rv.setState(node.state);
+                        
                     } else {
                         return node;
                     }
@@ -1244,14 +1424,14 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
                     let newbody = traverse(node.body, lbound - 1, newenvt);
                     cc.goback(node);
                     if (newbody != node.body) {
-                        return new LambdaN(newbody);
+                        return (new LambdaN(newbody)).setState(node.state);
                     } else {
                         return node;
                     }                    
                 }
                 return node;
             } else {
-                let rv = randomProgram(language, lbound, envt);
+                let rv = randomProgram(language, lbound, envt, undefined, node.state);
                 if (rv instanceof Error) {
                     cc.advance(node);
                     return node;
@@ -1283,7 +1463,7 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
         
 
 }
-
+//Score ranges from 0 for perfect match to 1 for bad match.
 function score(examples, outputs) {
     let correct = 0;
     for (let idx in outputs) {
@@ -1298,14 +1478,59 @@ function score(examples, outputs) {
 }
 
 
+function betterScore(examples, outputs) {
+    function singleOutput(example, output) {
+        //If example and output are of wong type DISTANCE = 100;
+        if (typeof (example) != typeof (output)) {
+            return 100;
+        }
+        //If example and output are both array type, get the average distance of their elements.
+        if (example instanceof Array && output instanceof Array) {
+            let minidx = Math.min(example.length, output.length);
+            let maxidx = Math.max(example.length, output.length);     
+            let totdist = 0;
+            for (let i = 0; i < minidx; ++i) {
+                let dist = singleOutput(example[i], output[i]);
+                totdist += dist;
+            }
+            totdist += (maxidx - minidx) * 100;
+            return totdist / maxidx;
+        }
+        //If they are both scalars, compute a true dist:
+        if (example == output) {
+            return 0;
+        }
+        if (example != output) {
+            return 50;
+        }
+    }
+    let output = 0;
+    for (let idx in outputs) {
+        output += singleOutput(examples[idx].out, outputs[idx]) / 100;
+    }
+    return output/outputs.length;
+}
+
+
 function run() {
     let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
     { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x" }], examples, maplanguage, score, 0.001, 3, 1000);
+    let sol = synthesize([{ kind: "input", name: "x" }], examples, maplanguage, betterScore, 0.001, 3, 1000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
         console.log("Output:", sol.eval(3, examples[i].in, []));
         console.log("Target:", examples[i].out);
     }
+}
+
+
+
+// Export for Node.js (CommonJS)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { run };
+}
+// Export for browsers (ES6 Modules)
+else if (typeof exports === 'undefined') {
+    window.myFunctions = { run };
 }
