@@ -12,7 +12,7 @@ function debugRandom() {
     return rv;
 }
 
-Math.random = debugRandom;
+//Math.random = debugRandom;
 
 
 let NOVALUE = "NOVAL@#";
@@ -113,231 +113,6 @@ function rvError(child_id) {
 }
 
 let KINDS = ["fun", "int", "lambda"];
-
-/**
- * 
- * A language is a list of language elements, which can be a "fun", an "int", or "lambda".
- * An implementation of a function should return either a regular value (if the computation succeeds), 
- * an rvError(n) if the computation fails and the failure can be attributed to argument n, 
- * or a badResult if some sub-computation produced a badResult. 
- * Functions can assume that all their arguments are good values. 
- * 
- * 
- * Abstraction. We are using the Hole to indicate an abstract value. Holes can have the following attributes:
- * type: {t:("lst", "int", "fun"), rec:, len:N}
- * 
- * 
- */
-let maplanguage = [
-    {
-        name: "map",
-        kind:"fun",
-        nargs: 2,
-        imp: function (lst, f) {
-            if (!(lst instanceof Array)) {                
-                return rvError(0);
-            }
-            if (!(f instanceof Function)) {
-                return rvError(1);
-            }
-            let rv = lst.map(f);
-            for (let elem of rv) {
-                if (isError(elem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(elem)) {
-                    return elem;
-                }
-            }
-            return rv;
-        },
-        abstract: function (lst, f) {
-            if (lst instanceof Hole) {
-                if (lst.type && lst.type.t != "lst") {
-                    return rvError(0);
-                }
-                if (f instanceof Hole) {
-                    if (f.type && f.type.t != "fun") {
-                        return rvError(1);
-                    }                    
-                } else {
-                    if (!(f instanceof Function)) {
-                        return rvError(1);
-                    }
-                }
-                return lst;
-            } else {
-                if (!(lst instanceof Array)) {
-                    return rvError(0);
-                }
-            }            
-            if (f instanceof Hole) {
-                if (f.type && f.type.t != "fun") {
-                    return rvError(1);
-                }
-                return lst.map((r)=>new Hole());
-            } else {
-                if (!(f instanceof Function)) {
-                    return rvError(1);
-                }
-            }
-            let rv = lst.map(f);
-            for (let elem of rv) {
-                if (isError(elem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(elem)) {
-                    return elem;
-                }
-            }
-            return rv;
-        }
-    }
-    ,
-    {
-        name: "reduce",
-        kind:"fun",
-        nargs: 3,
-        imp: function (lst, f, init) {
-            if (!(lst instanceof Array)) {                
-                return new Error(0);
-            }
-            if (!(f instanceof Function)) {
-                return new Error(1);
-            }
-            let acc = init;
-            for (let elem of lst) {
-                acc = f(elem, acc);
-                if (isError(acc)) {
-                    return rvError(1);
-                }
-                if (isBadResult(acc)) {
-                    return acc;
-                }                
-            }
-            return acc;
-        },
-        abstract: function (lst, f, init) {
-            if (lst instanceof Hole) {
-                if (lst.type && lst.type.t != "lst") {
-                    return rvError(0);
-                }
-                if (lst.type && lst.type.t == "lst"  && (f instanceof Function)) {
-                    return f(new Hole(lst.type.rec), init);
-                } 
-
-                if (f instanceof Hole) {
-                    if (f.type && f.type.t != "fun") {
-                        return rvError(1);
-                    }                    
-                } else {
-                    if (!(f instanceof Function)) {
-                        return rvError(1);
-                    }
-                }
-                return new Hole();
-            } else {
-                if (!(lst instanceof Array)) {
-                    return rvError(0);
-                }
-            }
-            if (f instanceof Hole) {
-                if (f.type && f.type.t != "fun") {
-                    return rvError(1);
-                }
-                return new Hole();
-            } else {
-                if (!(f instanceof Function)) {
-                    return rvError(1);
-                }
-            }
-            let acc = init;
-            for (let elem of lst) {
-                acc = f(elem, acc);
-                if (isError(acc)) {
-                    return rvError(1);
-                }
-                if (isBadResult(acc)) {
-                    return acc;
-                }
-            }
-            return acc;
-        }
-    }
-    , 
-    {
-        name: "mad",
-        kind:"fun",
-        nargs: 3,
-        imp: function (c, a, b) {
-            if (!(typeof(c) == 'number')) {                
-                return new Error(0);
-            }
-            if (!(typeof (a) == 'number')) {
-                return new Error(1);
-            }
-            if (!(typeof (b) == 'number')) {
-                return new Error(2);
-            }
-            return c * a + b;
-        },
-        abstract: function (c, a, b) {
-            let hasHole = false;
-            if (c instanceof Hole) {
-                if (c.type) {
-                    if(c.type.t != "int") {
-                        return new Error(0);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (c) == 'number')) {
-                    return new Error(0);
-                }
-            }
-
-            if (a instanceof Hole) {
-                if (a.type) {
-                    if(a.type.t != "int") {
-                        return new Error(1);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (a) == 'number')) {
-                    return new Error(1);
-                }
-            }
-            if (b instanceof Hole) {
-                if (b.type) {
-                    if(b.type.t != "int") {
-                        return new Error(2);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (b) == 'number')) {
-                    return new Error(2);
-                }
-            }
-            if (hasHole) {
-                return new Hole({t:"int"});
-            }
-            return c * a + b;
-        }
-    }
-    ,
-    {
-        name: "N",
-        kind: "int",
-        range: [0, 5]
-    }
-    ,
-    {
-        name: "lambda1",
-        kind: "lambda",        
-    }
-]
 
 let INSTID=0;
 
@@ -618,6 +393,15 @@ class Hole extends AST {
         }
     }
 }
+
+function isHole(val) {
+    return val instanceof Hole;
+}
+
+function makeHole(type) {
+    return new Hole(type);
+}
+
 
 const HOLE = new Hole();
 function getLabel(node, stage) {
@@ -1464,21 +1248,8 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
 
 }
 //Score ranges from 0 for perfect match to 1 for bad match.
+
 function score(examples, outputs) {
-    let correct = 0;
-    for (let idx in outputs) {
-        let ref = examples[idx].out;
-        if (ref === outputs[idx]) {
-            correct++;
-        }else if (typeof (ref) == typeof (outputs[idx])) {
-            correct += 0.5;
-        }
-    }
-    return 1 - (correct / outputs.length);
-}
-
-
-function betterScore(examples, outputs) {
     function singleOutput(example, output) {
         //If example and output are of wong type DISTANCE = 100;
         if (typeof (example) != typeof (output)) {
@@ -1512,25 +1283,14 @@ function betterScore(examples, outputs) {
 }
 
 
-function run() {
-    let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
-    { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x" }], examples, maplanguage, betterScore, 0.001, 3, 1000);
-    console.log("Solution ", sol.print());
-    for (let i = 0; i < examples.length; ++i) {
-        console.log("Input: ", examples[i].in.x);
-        console.log("Output:", sol.eval(3, examples[i].in, []));
-        console.log("Target:", examples[i].out);
-    }
-}
 
 
 
 // Export for Node.js (CommonJS)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { run };
+    module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score };
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
-    window.myFunctions = { run };
+    window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score };    
 }
