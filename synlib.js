@@ -1,7 +1,13 @@
 ﻿(() => {
 
 
+    let verbosity = 2;
 
+    function log(level, msg1, msg2, msg3) {
+        if (level <= verbosity) {
+            console.log(msg1, msg2, msg3);
+        }
+    }
 
 
     let randstate = 2;
@@ -17,10 +23,477 @@
         return rv;
     }
 
-    //Math.random = debugRandom;
+    Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
+
+
+
+    class Type {
+
+    }
+
+    class Primitive extends Type {
+        constructor(name) {
+            super();
+            this.name = name;
+        }
+        toString() {
+            return this.name;
+        }
+        addId() {
+            return this;
+        }
+        replaceVar(f) {
+            return this;
+        }
+        compatible(t) {
+            if(t instanceof Primitive) {
+                return this.name == t.name;
+            }
+            if (t instanceof TypeVar) {
+                return true;
+            }
+            return false;
+        }
+        contains() {
+            return false;
+        }
+    }
+
+    let greeks = {
+        "\\alpha": "α",
+        "\\beta": "β",
+        "\\gamma": "γ",
+        "\\delta": "δ",
+        "\\epsilon": "ε",
+    }
+
+    class TypeVar extends Type {
+        constructor(name, id) {
+            super();
+            this.name = name;
+            if (id != undefined) {
+                this.id = id;
+            }
+        }
+        toString() {
+            let rv;
+            if (this.name in greeks) {
+                rv= greeks[this.name];
+            } else {
+                rv= this.name;
+            }
+            if ('id' in this) {
+                rv += "."+ this.id;
+            }
+            return rv;
+        }
+        addId(id) {
+            if ('id' in this) {
+                return this;
+            } else {
+                return new TypeVar(this.name, id);
+            }            
+        }
+        replaceVar(f) {
+            return f(this);
+        }
+        compatible(t) {
+            return true;
+        }
+        contains(alt) {//assumes alt is also a typeVar
+            return alt.name == this.name;
+        }
+
+    }
+
+    class Parametric extends Type {
+        constructor(name, params) {
+            super();
+            this.name = name;
+            this.params = params;
+        }
+        toString() {
+            let rv = this.name;
+            rv += "[";
+            for (let i = 0; i < this.params.length; ++i) {
+                rv += this.params[i].toString();
+                if (i < this.params.length - 1) {
+                    rv += ", ";
+                }
+            }
+            rv += "]";
+            return rv;
+        }
+        addId(id) {
+            let np = [];
+            let changed = false;
+            for (let i = 0; i < this.params.length; ++i) {
+                let p = this.params[i].addId(id);
+                np.push(p);
+                if(p != this.params[i]) {
+                    changed = true;
+                }
+            }
+            if (changed) {
+                return new Parametric(this.name, np);
+            } else {
+                return this;
+            }
+        }
+        replaceVar(f) {
+            let np = [];
+            let changed = false;
+            for (let i = 0; i < this.params.length; ++i) {
+                let p = this.params[i].replaceVar(f);
+                np.push(p);
+                if (p != this.params[i]) {
+                    changed = true;
+                }
+            }
+            if (changed) {
+                return new Parametric(this.name, np);
+            } else {
+                return this;
+            }
+        }
+        compatible(t) {
+            if (t instanceof Primitive) {
+                return false;
+            }
+            if (t instanceof TypeVar) {
+                return true;
+            }
+            if (t instanceof Parametric) {
+                if (this.name != t.name) {
+                    return false;
+                }
+                if (this.params.length != t.params.length) {
+                    return false;
+                }
+                for (let i = 0; i < this.params.length; ++i) {
+                    if (!this.params[i].compatible(t.params[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (t instanceof FunctionType) {
+                return false;
+            }
+        }
+        contains(alt) {
+            //assumes alt is a typeVar
+            for (let p of this.params) {
+                if (p.contains(alt)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    class FunctionType extends Type {
+        constructor(from, to) {
+            super();
+            this.from = from;
+            this.to = to;
+        }
+        toString() {
+            let rv = this.from.toString();
+            if (this.from instanceof FunctionType) {
+                rv = "(" + rv + ")";
+            }
+            return rv + " -> " + this.to.toString();
+        }
+        addId(id) {
+            let newfrom = this.from.addId(id);
+            let newto = this.to.addId(id);
+            if (newfrom != this.from || newto != this.to) {
+                return new FunctionType(newfrom, newto);
+            } else {
+                return this;
+            }
+        }
+        replaceVar(f) {
+            let newfrom = this.from.replaceVar(f);
+            let newto = this.to.replaceVar(f);
+            if (newfrom != this.from || newto != this.to) {
+                return new FunctionType(newfrom, newto);
+            } else {
+                return this;
+            }
+        }
+        compatible(t) {
+            if (t instanceof FunctionType) {
+                return this.from.compatible(t.from) && this.to.compatible(t.to);
+            }
+            return t.compatible(this);
+        }
+        contains(alt) {
+            //assumes alt is a typeVar
+            return this.from.contains(alt) || this.to.contains(alt);
+        }
+    }
+
+    //This function parses a string representing a type into an AST of types.
+    //Type variables are represented wity Latex greek letters (e.g. \alpha, \beta),
+    //primitive types are represented with their name (e.g. int, string),
+    //parametric types are represented with a name and its parameters in square brackets (e.g. list[int], set[\alpha])
+    //Function types are represented with the -> symbol (e.g. int -> string -> bool)
+    function parseType(str) {
+        function consume(token, str) {
+            let rv = str.match(token);
+            if (rv) {
+                return str.substring(rv.index + rv[0].length).trim();
+            } else {
+                throw "Expected " + token + " but got " + str;
+            }
+        }        
+        function parseName(str) {
+            //check if it's a primitive or a type var and then return either [Primitive, rest] or [TypeVar, rest]]
+            let rv = str.match(/^[a-zA-Z]+/);
+            if (rv) {
+                return [new Primitive(rv[0]), str.substring(rv[0].length).trim()];
+            }
+            rv = str.match(/^\\[a-zA-Z]+/);
+            if (rv) {
+                return [new TypeVar(rv[0]), str.substring(rv[0].length).trim()];
+            } else {
+                throw "Expected a type name or a type variable but got " + str;
+            }            
+        }
+
+        str = str.trim();
+        let type;
+        if (str[0] == "(") {
+            let rv = parseType(str.substring(1));
+            str = consume("\\)", rv[1]);
+            type = rv[0];
+        } else {
+            let res = parseName(str);
+            type = res[0];
+            str = res[1];
+            if (str[0] == "[") {
+                let params = [];
+                str = consume("\\[", str);
+                while (str[0] != "]") {
+                    let res = parseType(str);
+                    params.push(res[0]);
+                    str = res[1];
+                    if (str[0] == ",") {
+                        str = consume(",", str);
+                    }
+                }
+                str = consume("\\]", str);
+                type = new Parametric(type.name, params);
+            }
+        }
+        if(str[0] == "-") {
+            str = consume("->", str);
+            let res = parseType(str);
+            type = new FunctionType(type, res[0]);
+            str = res[1];
+        }
+        return [type, str];
+    }
+    function Tp(str) {
+        let rv = parseType(str);
+        return rv[0];
+    }
+
+
+
+    class TypeChecker {
+
+        constructor() {
+            this.constraints = {};
+        }
+
+        checkpoint() {
+            //return a clone of the constraints object            
+            return Object.assign({}, this.constraints);
+        }
+        revert(checkpoint) {
+            this.constraints = Object.assign({}, checkpoint);
+        }
+
+        checkStep(node, expectedType) {
+            if (!expectedType) { return true; }
+            if (node.kind == "lambda") {
+                return expectedType instanceof FunctionType;
+            }
+            if (node.kind == 'fun') {
+                return expectedType.compatible(node.returntype);
+            }
+            if (node.type) {
+                return expectedType.compatible(node.type);
+            }            
+            return true;
+        }
+
+
+        convert(type, id) {
+            return type.replaceVar((t) => {
+                t = t.addId(id);
+                let ts = t.toString();
+                if (ts in this.constraints) {
+                    return this.convert(this.constraints[ts]);
+                } else {
+                    return t;
+                }
+            });            
+        }
+        constraint(ta, tb) {
+            if (ta in this.constraints) {
+                let alt = this.constraints[ta];
+                if (alt instanceof TypeVar) {                    
+                    if (!(tb instanceof TypeVar)) {
+                        //We need to check if the parametric doesn't contain alt internally, because then it wouldn't be compatible.
+                        if (!(tb.contains(alt))) {
+                            this.constraints[ta] = tb;
+                            this.constraints[alt.toString()] = tb;
+                            return true;
+                        } else {
+                            console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");                            
+                            return false;
+                        }
+                    }
+                    console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");
+                    throw "NYI";
+                    return false;
+                } else {
+                    let tbs = tb.toString();
+                    let alts = alt.toString();
+                    if (tbs == alts) {
+                        return true;
+                    }
+                    if (tb instanceof TypeVar) {                        
+                        return this.constraint(tbs, alt);                        
+                    }
+                    console.log("Trying to unify " + ta + " with " + tb.toString() + " but it's already constrained to " + alt);
+                    if (alt instanceof Parametric && !(tb instanceof Parametric)) {
+                        return false;
+                    }      
+                    if (alt instanceof FunctionType && !(tb instanceof FunctionType)) {
+                        return false;
+                    }
+                    return this.unify(alt, tb);                    
+                }
+            } else {
+                this.constraints[ta] = tb;
+                return true;
+            }            
+        }
+
+        addConstraint(expectedType, newType, id) {
+            if (expectedType == undefined) { return true; }
+            let type = newType;
+            type = type.addId(id);
+            return this.unify(expectedType, type);
+        }
+        unify(ta, tb) {
+            if (ta instanceof Primitive) {
+                if (tb instanceof Primitive) {
+                    return ta.name == tb.name; 
+                }
+                if (tb instanceof TypeVar) {                    
+                    return this.constraint(tb.toString(), ta);
+                }
+                return false;
+            }
+            if (ta instanceof TypeVar) {
+                if(tb instanceof Primitive) {                    
+                    return this.constraint(ta.toString(), tb);
+                }
+                if (tb instanceof TypeVar) {
+                    let tas = ta.toString();
+                    let tbs = tb.toString();
+                    if (tas == tbs) {
+                        return true;
+                    }
+                    // We  want to pick one to be the primary, so that the secondary just gets replaced by the primary.
+                    //The goal is to avoid cycles.
+                    if (tas in this.constraints) {
+                        if (tbs in this.constraints) {
+                            //Both already have constraints. We need to check if they are compatible.
+                            //If they are not, then we are done and return false.
+                            let rv = this.unify(this.constraints[tas], this.constraints[tbs]);
+                            if (!rv) {
+                                return false;
+                            }
+                            //If they are compatible, we just pick one to point to the other.
+                            return this.constraint(tas, this.constraints[tbs]);
+                        } else {
+                            //Easy, ta has constraints, tb does not. We just point tb to ta.
+                            return this.constraint(tbs, this.constraints[tas]);
+                        }
+                    } else {
+                        if (tbs in this.constraints) {
+                            //Easy, tb has constraints, ta does not. We just point ta to tb.
+                            return this.constraint(tas, this.constraints[tbs]);
+                        } else {
+                            //None of them has constraints, we just point one to the other.
+                            return this.constraint(tas, tb);
+                        }
+                    }
+
+                }
+                if (tb instanceof Parametric) {
+                    return this.constraint(ta.toString(), tb); 
+                }
+                if (tb instanceof FunctionType) {
+                    return this.constraint(ta.toString(), tb);                    
+                }
+            }
+            if (ta instanceof Parametric) {
+                if (tb instanceof Primitive) {                    
+                    return false;
+                }
+                if (tb instanceof TypeVar) {                    
+                    return this.constraint(tb.toString(), ta);
+                }
+                if (tb instanceof Parametric) {
+                    if (ta.name != tb.name) {
+                        return false;
+                    }
+                    if (ta.params.length != tb.params.length) {
+                        return false;
+                    }
+                    for (let i = 0; i < ta.params.length; ++i) {
+                        if (!this.unify(ta.params[i], tb.params[i])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                if (tb instanceof FunctionType) {
+                    return false;
+                }
+            }
+            if (ta instanceof FunctionType) {
+                if (tb instanceof Primitive) {
+                    return false;
+                }
+                if (tb instanceof TypeVar) {
+                    return this.constraint(tb.toString(), ta);
+                }
+                if (tb instanceof Parametric) {
+                    return false;
+                }
+                if (tb instanceof FunctionType) {
+                    return this.unify(ta.from, tb.from) && this.unify(ta.to, tb.to);
+                }
+            }
+        }
+
+
+
+    }
+
+
+
 
     class Error {
         constructor(narg) {
@@ -70,7 +543,12 @@
                         }
                     });
                     if (changed) {
-                        let rv = new FunN(node.name, node.imp, node.absfun, newargs);
+                        let rv;
+                        if (node.isParametric()) {
+                            rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
+                        } else {
+                            rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                        }                           
                         if (newargs.length == 0) {
                             rv.childstate = st.transition(node.state, rv, 0);
                         }
@@ -163,6 +641,9 @@
             this.absfun = abstract;
             this.args = args;
         }
+        isParametric() {
+            return false;
+        }
         print() {
             let rv = this.name + "(";
             for (let arg of this.args) {
@@ -225,6 +706,29 @@
             return true;
         }
     }
+
+
+    class pFunN extends FunN {
+        constructor(name, imp, abstract, args, param) {
+            super(name, imp(param), abstract(param), args);
+            this.parametric = true;
+            this.param = param;
+            this.impP = imp;
+            this.abstractP = abstract;
+        }
+        isParametric() {
+            return true;
+        }
+        print() {
+            let rv = this.name + "["+ this.param +"]" + "(";
+            for (let arg of this.args) {
+                rv += arg.print() + ", ";
+            }
+            rv += ")";
+            return rv;
+        }
+    }
+
 
 
 
@@ -342,9 +846,15 @@
     }
 
     class deBroujin extends AST {
-        constructor(idx) {
+        constructor(idx, type, pos) {
             super("index");
             this.idx = idx;
+            if (type) {
+                this.type = type;
+            }
+            if (pos) {
+                this.pos = pos;
+            }
         }
         print() {
             return "$" + this.idx;
@@ -437,17 +947,39 @@
             this.tracker = {};
         }
 
+        nextConstruct(construct, initial, state, language, extras) {
+            let totalLen = language.length + (extras ? extras.length : 0);
+            let idx = (construct.pos + 1) % totalLen;
+            if (idx == initial) {
+                //This means we have wrapped around and we are done.
+                return undefined;
+            } else {                
+                return idx >= language.length ? extras[idx - language.length] : language[idx];
+            }
+        }
+
         randomConstruct(state, language, extras) {
             let tstate;
             let key = stateToStr(state);
             if (key in this.tracker) {
                 tstate = this.tracker[key];
             }
+            function uniform() {
+                let el = 0;
+                if (extras) {
+                    el = extras.length;
+                }
+                let idx = Math.floor(Math.random() * (language.length + el));
+                return idx >= language.length ? extras[idx - language.length] : language[idx];
+            }
             if (tstate && tstate.visits > 40) {
                 let rnd = Math.random();
 
                 let scores = this.succScores(state, language, extras);
                 let total = scores[1];
+                if (total == 0) {
+                    return uniform();
+                }
                 scores = scores[0];
                 let tally = 0;
                 let i = 0;
@@ -468,12 +1000,7 @@
                 }
                 console.log("WTF!!!!");
             } else {
-                let el = 0;
-                if (extras) {
-                    el = extras.length;
-                }
-                let idx = Math.floor(Math.random() * (language.length + el));
-                return idx >= language.length ? extras[idx - language.length] : language[idx];
+                return uniform();
             }
         }
 
@@ -615,7 +1142,7 @@
                 }
                 return rv;
             }
-            console.log(printAll(this.constraints, ""));
+            return printAll(this.constraints, "");
         }
 
 
@@ -837,129 +1364,195 @@
     function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N) {
         let cc = new ConstraintChecker();
         let st = new StatsTracker();
-        function randomProgram(language, bound, extras, localenv, state) {
+        let tc = new TypeChecker();
+        function randomProgram(language, bound, extras, localenv, state, expectedType, initialBound) {
+            if (initialBound == undefined) {
+                initialBound = bound;
+            }
             if (state == undefined) {
                 state = st.startState();
             }
-            function randomConstruct() {
-                return st.randomConstruct(state, language, extras);
-            }
+            
+            let construct = st.randomConstruct(state, language, extras);   
+            let initialConst = construct.pos;
 
-            let construct = randomConstruct();
-            if (bound <= 0) {
-                while (construct.kind == "lambda" || construct.kind == "fun") {
-                    st.failedAction(state, construct);
-                    construct = randomConstruct();
-                }
-            }
-
-            let chk = cc.checkStep(construct, localenv);
-            let i = 0;
-            while (!chk && i < 5) {
-                st.failedAction(state, construct);
-                ++i;
-                construct = randomConstruct();
+            function advanceConstruct() {
                 if (bound <= 0) {
-                    while (construct.kind == "lambda" || construct.kind == "fun") {
+                    while (construct && (construct.kind == "lambda" || (construct.kind == "fun" && construct.nargs > 0))) {
                         st.failedAction(state, construct);
-                        construct = randomConstruct();
+                        construct = st.nextConstruct(construct, initialConst, state, language, extras);
                     }
                 }
-                chk = cc.checkStep(construct, localenv);
+                if (construct) {
+                    let chk = cc.checkStep(construct, localenv);
+                    chk = chk && tc.checkStep(construct, expectedType);
+                    let i = 0;
+                    while (!chk && construct) {
+                        st.failedAction(state, construct);
+                        ++i;
+                        construct = st.nextConstruct(construct, initialConst, state, language, extras);
+                        if (bound <= 0) {
+                            while (construct && (construct.kind == "lambda" || (construct.kind == "fun" && construct.nargs > 0))) {
+                                st.failedAction(state, construct);
+                                construct = st.nextConstruct(construct, initialConst, state, language, extras);
+                            }
+                        }
+                        if (construct) {
+                            chk = cc.checkStep(construct, localenv);
+                            chk = chk && tc.checkStep(construct, expectedType);
+                        }                        
+                    }
+                } 
             }
-            if (!chk) {
+
+
+            advanceConstruct();
+
+                       
+            if (!construct) {
                 st.failedState(state);
-                return new Error(0);
+                return new Error(0); // Error 0 means that this node was unsatisfiable. 
             }
             let oldState;
+            let oldTypes = tc.checkpoint();
 
-
-            function failedReturn(err) {
-                if (err.narg == 0) {
-                    return new Error(1);
-                } else {
-                    let mr = Math.random();
-                    if (mr > 1 / Math.pow(2, bound)) {
-                        cc.retract(oldState);
-                        return randomProgram(language, bound, extras, localenv, state);
+            function fleshOutConstruct(construct) {
+                if (construct.kind == "fun") {
+                    let n = construct.nargs;
+                    let args = [];
+                    let rv;
+                    if (construct.parametric) {
+                        let param = construct.paramInit();
+                        rv = new pFunN(construct.name, construct.imp, construct.abstract, args, param);
                     } else {
-                        return new Error(err.narg + 1);
+                        rv = new FunN(construct.name, construct.imp, construct.abstract, args);
                     }
+                    if (!tc.addConstraint(expectedType, construct.returntype, rv.id)) {
+                        return new Error(0);
+                    }
+                    rv.state = state;
+                    oldState = cc.advance(rv, localenv);
+                    st.trackAction(state, rv);
+                    if (n == 0) {
+                        rv.childstate = st.transition(state, rv, 0);
+                    }
+                    for (let i = 0; i < n; ++i) {
+                        let newstate = st.transition(state, rv, i);
+                        let arg = randomProgram(language, bound - 1, extras, localenv, newstate, tc.convert(construct.typeargs[i], rv.id), initialBound);
+                        cc.goback(rv);
+                        if (arg instanceof Error) {
+                            //If i==0 and arg.narg == 0, it means that this whole node is unsatisfiable. 
+                            if (i == 0 && arg.narg == 0) {
+                                return arg;
+                            } else {
+                                //The farther we get from zero, the more likely it is that random regeneration might fix things.
+                                return new Error(arg.narg + 1);
+                            }                            
+                        }
+                        args.push(arg);
+                    }
+                    //console.log("Returning fun", bound);
+                    return rv;
                 }
-            }
-
-
-            //console.log("Constructing ", construct.kind, bound)
-            if (construct.kind == "fun") {
-                let n = construct.nargs;
-                let args = [];
-                let rv = new FunN(construct.name, construct.imp, construct.abstract, args);
-                rv.state = state;
-                oldState = cc.advance(rv, localenv);
-                st.trackAction(state, rv);
-                if (n == 0) {
+                if (construct.kind == "int") {
+                    let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
+                    let rv = new IntN(randval);                    
+                    if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
+                        return new Error(0);
+                    }
+                    rv.state = state;
                     rv.childstate = st.transition(state, rv, 0);
+                    oldState = cc.advance(rv, localenv);
+                    return rv;
                 }
-                for (let i = 0; i < n; ++i) {
-                    let newstate = st.transition(state, rv, i);
-                    let arg = randomProgram(language, bound - 1, extras, localenv, newstate);
-                    cc.goback(rv);
-                    if (arg instanceof Error) {
-                        return failedReturn(arg);
+                if (construct.kind == "lambda") {
+                    let args;
+                    let rv = new LambdaN(HOLE);
+                    rv.state = state;
+                    oldState = cc.advance(rv, localenv);
+                    if (!expectedType) {
+                        //should not produce lambdas if we don't know what type the argument is going to be.
+                        return new Error(0);
                     }
-                    args.push(arg);
+                    let typeFrom =  expectedType.from ;
+                    let typeTo = expectedType.to ;
+                    if (extras) {
+                        let idx = extras.length;     
+                        args = extras.map((dbi, i)=> new deBroujin(idx-i, dbi.type, dbi.pos) );
+                        args.push(new deBroujin(0, typeFrom, language.length+idx));
+                    } else {
+                        args = [new deBroujin(0, typeFrom, language.length)];
+                    }
+                    
+                    st.trackAction(state, rv);
+                    let newstate = st.transition(state, rv, 0);
+                    let body = randomProgram(language, bound - 1, args, undefined, newstate, typeTo, initialBound);
+                    cc.goback(rv);
+                    rv.body = body;
+                    if (body instanceof Error) {
+                        return body;
+                    }
+                    return rv;
                 }
-                //console.log("Returning fun", bound);
-                return rv;
+                if (construct.kind == "input") {
+                    oldState = cc.advance(construct, localenv);                    
+                    if (!tc.addConstraint(expectedType, construct.type)) {
+                        return new Error(0);
+                    }
+                    let rv = new InputN(construct.name);
+                    rv.setState(state);
+                    rv.childstate = st.transition(state, rv, 0);
+                    st.trackAction(state, rv);
+                    return rv;
+                }
+                if (construct.kind == "index") {
+                    let rv = new deBroujin(construct.idx);
+                    oldState = cc.advance(rv, localenv);
+                    if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
+                        return new Error(0);
+                    }                                        
+                    st.trackAction(state, rv);
+                    rv.setState(state);
+                    rv.childstate = st.transition(state, rv, 0);
+                    return rv;
+                }
             }
-            if (construct.kind == "int") {
-                let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
-                let rv = new IntN(randval);
-                rv.state = state;
-                rv.childstate = st.transition(state, rv, 0);
-                oldState = cc.advance(rv, localenv);
-                return rv;
-            }
-            if (construct.kind == "lambda") {
-                let args;
-                if (extras) {
-                    let idx = -1;
-                    args = extras.map((p) => { if (p.idx > idx) { idx = p.idx; } return p; });
-                    ++idx;
-                    args.push(new deBroujin(idx));
+            let attempts = 0;
+            while (construct) {
+                ++attempts;
+                let out = fleshOutConstruct(construct);
+                if (out instanceof Error) {
+                    if (out.narg == 0) {
+                        //This means that this construct failed conclusively, so we should continue cycling through constructs until
+                        //we run out, at which point we return 0.
+                        st.failedAction(state, construct);
+                        construct = st.nextConstruct(construct, initialConst, state, language, extras);
+                        advanceConstruct();                   
+                        cc.retract(oldState);
+                        tc.revert(oldTypes);
+                    } else {
+                        //This means that this construct failed, but it might be fixable by regenerating it.
+                        //We flip a biased coin to either retry at this level or go back to the previous level.
+                        //The lower the bound, the more likely we are to go back to the previous level.
+                        let mr = Math.random();
+                        if (initialBound == bound || (mr > 1 / Math.pow(2, bound) && attempts < 5)) {
+                            //retry at this level. Since we retry with random, we re-initialize the initial construct.
+                            construct = st.randomConstruct(state, language, extras);
+                            initialConst = construct.pos;
+                            advanceConstruct();
+                            cc.retract(oldState);
+                            tc.revert(oldTypes);
+                        } else {
+                            return new Error(out.narg + 1);
+                        }
+                    }
                 } else {
-                    args = [new deBroujin(0)];
-                }
-                let rv = new LambdaN(HOLE);
-                rv.state = state;
-                oldState = cc.advance(rv, localenv);
-                st.trackAction(state, rv);
-                let newstate = st.transition(state, rv, 0);
-                let body = randomProgram(language, bound - 1, args, undefined, newstate);
-                cc.goback(rv);
-                rv.body = body;
-                if (body instanceof Error) {
 
-                    return failedReturn(body);
+                    out.type = expectedType? tc.convert(expectedType, out.id) : undefined;
+                    return out;
                 }
-                return rv;
             }
-            if (construct.kind == "input") {
-                oldState = cc.advance(construct, localenv);
-                let rv = new InputN(construct.name);
-                rv.setState(state);
-                rv.childstate = st.transition(state, rv, 0);
-                st.trackAction(state, rv);
-                return rv;
-            }
-            if (construct.kind == "index") {
-                let rv = new deBroujin(construct.idx);
-                oldState = cc.advance(rv, localenv);
-                st.trackAction(state, rv);
-                rv.setState(state);
-                rv.childstate = st.transition(state, rv, 0);
-                return rv;
-            }
+            return new Error(0);
         }
 
 
@@ -996,10 +1589,10 @@
                 }
 
                 if (main == bestBad.main) {
-                    console.log("Best main", bestBad);
+                    log(2, "Best main", bestBad);
                     cc.addConstraint(bestBad);
                 } else {
-                    console.log("Best main", main.print());
+                    log(2, "Best main", main.print());
                     cc.addConstraint(main, bestBad.envt);
                 }
 
@@ -1111,14 +1704,21 @@
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
             let out = runOrLocalize(examples, prog, bound);
+            function solprint() {
+                let sol = this;
+                 return sol.prog.print() + " : " + sol.status + " : " +  sol.budget + " crashing:" + sol.crashing;
+
+            }
+            let crashing = 0;
             while (budget > 0) {
                 if (isBadResult(out)) {
+                    ++crashing;
                     st.scoreTree(prog, -100);
                     //In this case, an error was localized to an AST node.
                     //Always re-randomize the AST node with the error.                
-                    console.log(budget + " Bad candidate          ", prog.print());
+                    log(1, budget + " Bad candidate          ", prog.print());
                     randomizeLocalizedError(language, prog, out, bound);//in-place mutation of prog.
-                    console.log(budget + " Rerandomized candidate:", prog.print());
+                    log(2, budget + " Rerandomized candidate:", prog.print());
                     //Could it ever modify bestProg? no, because bestProg works, and this only runs if prog doesn't work.
                     --budget;
                     out = runOrLocalize(examples, prog, bound);
@@ -1126,10 +1726,12 @@
                 } else {
                     let score = scoreOutputs(examples, out)
                     st.scoreTree(prog, (1 - score) * 100);
-                    console.log(budget + " Score:", score, prog.print());
+                    log(1, budget + " Score:", score, prog.print());
                     if (score < threshold) {
                         //All outputs correct enough, we are done!
-                        return prog;
+                        //return an object with the program, the status, the score, and the budget. 
+                        //it also has a print function that returns a string representation of the object.
+                        return { prog: prog, status: "CORRECT", score: score, budget: budget, crashing:crashing, print:solprint };
                     } else {
                         cc.addConstraint(ROOT.temp(prog), [], 10);
                         if (score < bestScore || (score == bestScore && Math.random() > 0.75)) {
@@ -1137,11 +1739,11 @@
                             bestScore = score;
                             bestSolution = prog;
                             bestOutput = out;
-                            console.log("New best solution", score, bestSolution.print());
+                            log(1, "New best solution", score, bestSolution.print());
                         }
-                        console.log("Before randomization", prog.print());
+                        log(2, "Before randomization", prog.print());
                         let newprog = randomizeClone(language, prog, bound);
-                        console.log("After randomization", newprog.print());
+                        log(2, "After randomization", newprog.print());
                         --budget;
                         out = runOrLocalize(examples, newprog, bound);
                         if (isBadResult(out)) {
@@ -1153,7 +1755,7 @@
                             st.scoreTree(newprog, (1 - newscore) * 100);
                             if (newscore <= score) {
                                 //At least we made an improvement; make prog = newprog and keep improving.
-                                console.log("New candidate", score, newprog.print());
+                                log(2, "New candidate", score, newprog.print());
                                 prog = newprog;
                             } else {
                                 prog = bestSolution; //could bestSolution be undefined? No.  
@@ -1163,7 +1765,7 @@
                     }
                 }
             }
-            return bestSolution;
+            return { prog: bestSolution, status: "INCORRECT", score: bestScore, budget: 0, crashing: crashing, print:solprint };            
         }
 
         /**
@@ -1176,31 +1778,36 @@
         function randomizeClone(language, prog, bound) {
             let probBound = Math.pow(1.5, -bound);
             cc.reset();
-            function traverse(node, lbound, envt) {
+            function traverse(node, lbound, envt, expectedType) {
                 if (Math.random() > probBound) {
                     cc.advance(node);
                     if (node instanceof FunN) {
-                        let changed = false;
+                        let changed = false;                        
                         let newargs = node.args.map((arg) => {
                             if (changed) {
                                 cc.advance(arg);
                                 cc.goback(node);
                                 return arg;
                             } else {
-                                let rv = traverse(arg, lbound - 1, envt);
+                                let rv = traverse(arg, lbound - 1, envt, arg.type);
                                 cc.goback(node);
                                 if (rv != arg) {
                                     changed = true;
                                 }
                                 return rv;
-                            }
-
+                            }                            
                         });
                         if (changed) {
-                            let rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                            let rv;
+                            if (node.isParametric()) {
+                                rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
+                            } else {
+                                rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                            }                            
                             if (newargs.length == 0) {
                                 rv.childstate = st.transition(node.state, rv, 0);
                             }
+                            rv.type = expectedType;
                             return rv.setState(node.state);
 
                         } else {
@@ -1208,19 +1815,23 @@
                         }
                     }
                     if (node instanceof LambdaN) {
-                        let newenvt = envt.slice(0);
-                        newenvt.push(new deBroujin(envt.length));
-                        let newbody = traverse(node.body, lbound - 1, newenvt);
+                        let idx = envt.length;
+                        let newenvt = envt.map((dbi, i) => new deBroujin(idx - i, dbi.type, dbi.pos));
+                        let argtype = node.type ? node.type.from : undefined;
+                        newenvt.push(new deBroujin(0, argtype, language.length+envt.length));
+                        let newbody = traverse(node.body, lbound - 1, newenvt, node.body.type);
                         cc.goback(node);
                         if (newbody != node.body) {
-                            return (new LambdaN(newbody)).setState(node.state);
+                            let rv = (new LambdaN(newbody)).setState(node.state);
+                            rv.type = expectedType;
+                            return rv;
                         } else {
                             return node;
                         }
                     }
                     return node;
                 } else {
-                    let rv = randomProgram(language, lbound, envt, undefined, node.state);
+                    let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
                     if (rv instanceof Error) {
                         cc.advance(node);
                         return node;
@@ -1240,16 +1851,42 @@
         }
 
 
+        function processLanguage(language, inputspec) {
+            let rv = language.map(
+                (c, idx) => {
+                    if (c.kind == "fun") {
+                        let type = c.type;
+                        let nargs = c.nargs;
+                        let typeargs = [];
+                        for (let i = 0; i < nargs; ++i) {
+                            typeargs.push(type.from);
+                            type = type.to;
+                        }
+                        c.typeargs = typeargs;
+                        c.returntype = type;                        
+                        return c;
+                    } if (c.kind == "int") {
+                        c.type = new Primitive("int");                        
+                        return c;
+                    } else {                        
+                        return c;
+                    }
+                }
+            );
+            rv = rv.concat(inputspec);
+            rv.map((c, idx) => { c.pos = idx; return c; });
+            return rv;
+        }
 
-        let langWithInputs = language.slice(0).concat(inputspec);
-
-        let rp = randomProgram(langWithInputs, bound);
-
-        console.log(rp.print());
-
-        return runAndFix(langWithInputs, examples, rp, bound, N);
 
 
+        let langWithInputs = processLanguage(language, inputspec);
+
+        let rp = randomProgram(langWithInputs, bound);       
+
+        let rv = runAndFix(langWithInputs, examples, rp, bound, N);
+
+        return rv;
 
     }
     //Score ranges from 0 for perfect match to 1 for bad match.
@@ -1293,11 +1930,11 @@
 
     // Export for Node.js (CommonJS)
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score };
+        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, Tp };
     }
     // Export for browsers (ES6 Modules)
     else if (typeof exports === 'undefined') {
-        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score };
+        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, Tp };
     }
 
 })();

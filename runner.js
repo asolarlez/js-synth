@@ -6,4 +6,4 @@ var simplmaplang = require('./simplmaplang.js');
 
 
 
-simplmaplang.run();
+simplmaplang.runAll();

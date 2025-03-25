@@ -5,6 +5,7 @@ let score;
 let rvError;
 let isError;
 let isBadResult;
+let Tp;
 
 if (typeof module !== 'undefined' && module.exports) {
     let synlib = require('./synlib.js');
@@ -15,6 +16,7 @@ if (typeof module !== 'undefined' && module.exports) {
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
+Tp = synlib.Tp;
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
@@ -25,6 +27,7 @@ else if (typeof exports === 'undefined') {
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
+Tp = synlib.Tp;
 }
 
 
@@ -46,6 +49,7 @@ let maplanguage = [
     {
         name: "map",
         kind: "fun",
+        type: Tp("list[\\alpha]->(\\alpha->\\beta)->list[\\beta]"),
         nargs: 2,
         imp: function (lst, f) {
             if (!(lst instanceof Array)) {
@@ -111,6 +115,7 @@ let maplanguage = [
     {
         name: "reduce",
         kind: "fun",
+        type: Tp("list[\\alpha]->(\\alpha->\\beta->\\beta)->\\beta->\\beta"),
         nargs: 3,
         imp: function (lst, f, init) {
             if (!(lst instanceof Array)) {
@@ -203,6 +208,7 @@ let maplanguage = [
         name: "mad",
         kind: "fun",
         nargs: 3,
+        type: Tp("int->int->int->int"),
         imp: function (c, a, b) {
             if (!(typeof (c) == 'number')) {
                 return rvError(0);
@@ -272,14 +278,60 @@ let maplanguage = [
         kind: "lambda",
     }
 ]
+let problems = {
+    "mapincrement": {
+        io: [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
+            { in: { x: [5, 6, 9] }, out: [6, 7, 10] }],
+        depth: 4
+    },
+    "reducebasic": {
+        io: [{ in: { x: [1, 2, 3] }, out: 6 },
+        { in: { x: [5, 6, 9] }, out: 20 },
+            { in: { x: [7, 0, 0] }, out: 7 }],
+        depth: 4
+    },
+    "2dreduce": {
+        io:[{ in: { x: [[1, 2], [3, 4]] }, out: [3, 7] },
+        { in: { x: [[5, 6], [9, 10]] }, out: [11, 19] },
+            { in: { x: [[7, 0], [1, 2, 3], [2, 3]] }, out: [7, 6, 5] }],
+        depth:6
+    },
+    "prodreduce": {
+        io:[{ in: { x: [1, 2, 3] }, out: 6 },
+            { in: { x: [5, 2, 3] }, out: 30 },
+            { in: { x: [7, 0, 0] }, out: 0 }],
+        depth: 4
+    }
+};
 
+
+
+function runOne(p) {
+    let problem = problems[p];
+    console.log("Problem ", p);
+    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], problem.io, maplanguage, score, 0.001, problem.depth, 10000);
+    console.log(p, " Solution ", sol.print());;
+    for (let i = 0; i < problems[p].length; ++i) {
+        console.log("Input: ", problems[p][i].in.x);
+        console.log("Output:", sol.prog.eval(3, problems[p][i].in, []));
+        console.log("Target:", problems[p][i].out);
+    }
+}
+
+
+function runAll(){
+    for (let p in problems) {
+        runOne(p);
+    }
+
+}
 
 
 function runB() {
     let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
     { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x" }], examples, maplanguage, score, 0.001, 3, 1000);
-    console.log("Solution ", sol.print());
+    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, score, 0.001, 3, 1000);
+    console.log("Solution ", sol.prog.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
         console.log("Output:", sol.eval(3, examples[i].in, []));
@@ -290,12 +342,13 @@ function runB() {
 
 function run() {
     let examples = [{ in: { x: [1, 2, 3] }, out: 6 },
-    { in: { x: [5, 6, 9] }, out: 20 }];
-    let sol = synthesize([{ kind: "input", name: "x" }], examples, maplanguage, score, 0.001, 4, 1000);
+        { in: { x: [5, 6, 9] }, out: 20 },
+        { in: { x: [7, 0, 0] }, out: 7 }];
+    let sol = synthesize([{ kind: "input", name: "x", type:Tp("list[int]") }], examples, maplanguage, score, 0.001, 4, 5000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
-        console.log("Output:", sol.eval(3, examples[i].in, []));
+        console.log("Output:", sol.prog.eval(3, examples[i].in, []));
         console.log("Target:", examples[i].out);
     }
 }
@@ -303,9 +356,9 @@ function run() {
 
 // Export for Node.js (CommonJS)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { language: maplanguage, run:run };
+    module.exports = { language: maplanguage, run: run, runAll: runAll, runOne };
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
-    window.simplmaplang = { language: maplanguage, run: run };
+    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne };
 }
