@@ -23,7 +23,7 @@
         return rv;
     }
 
-    //Math.random = debugRandom;
+    Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
@@ -103,8 +103,18 @@
         compatible(t) {
             return true;
         }
-        contains(alt) {//assumes alt is also a typeVar
-            return alt.name == this.name;
+        contains(alt) {
+            if (alt instanceof TypeVar) {
+                if ('id' in this) {
+                    return alt.name == this.name && alt.id === this.id;
+                } else {
+                    return alt.name == this.name;
+                }                
+            } else {
+                //alt must be a string;               
+                return alt == this.toString();
+            }
+            
         }
 
     }
@@ -345,12 +355,16 @@
         }
 
 
-        convert(type, id) {
+        convert(type, id, limit) {
+            if (limit == undefined) { limit = 20; }
+            if (limit <= 0) {
+                throw "Too much";
+            }
             return type.replaceVar((t) => {
                 t = t.addId(id);
                 let ts = t.toString();
                 if (ts in this.constraints) {
-                    return this.convert(this.constraints[ts]);
+                    return this.convert(this.constraints[ts], undefined, limit-1);
                 } else {
                     return t;
                 }
@@ -393,6 +407,9 @@
                     return this.unify(alt, tb);                    
                 }
             } else {
+                if (tb.contains(ta)) {
+                    return false;
+                }
                 this.constraints[ta] = tb;
                 return true;
             }            
