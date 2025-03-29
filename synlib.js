@@ -23,7 +23,7 @@
         return rv;
     }
 
-    Math.random = debugRandom;
+    //Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
@@ -312,11 +312,22 @@
         }
 
         checkpoint() {
-            //return a clone of the constraints object            
-            return Object.assign({}, this.constraints);
+            //return a clone of the constraints object
+            //return Object.assign({}, this.constraints);
+            let rv = {};
+            let tc = this.constraints;
+            for (let key in tc) {
+                rv[key] = tc[key];
+            }
+            return rv;
         }
         revert(checkpoint) {
-            this.constraints = Object.assign({}, checkpoint);
+            //this.constraints = Object.assign({}, checkpoint);
+            let tc = {};
+            for (let key in checkpoint) {
+                tc[key] = checkpoint[key];
+            }
+            this.constraints = tc;
         }
 
         checkStep(node, expectedType) {
@@ -934,11 +945,11 @@
     }
 
     function stateToStr(state) {
-        return state.depth + ":" + state.grandpa + ":" + state.parent + ":" + state.idx;
+        return state.depth + ":" + state.grandpa + ":" + state.parentIdx + ":" + state.parent;
     }
 
-    function nextStateToStr(state, node, idx) {
-        return (state.depth + 1) + ":" + state.parent + ":" + getLabel(node) + ":" + idx;
+    function nextStateToStr(state, node) {
+        return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node) ;
     }
 
 
@@ -1011,38 +1022,35 @@
                 return (Math.tanh(score / 100) + 1) / 2;
             }
             for (let i = 0; i < language.length; ++i) {
-                let construct = language[i];
-                let sz = construct.nargs || 0;
-                sz = Math.max(sz, 1);
+                let construct = language[i];                
                 let totreward = 0;
-                for (let j = 0; j < sz; ++j) {
-                    let key = nextStateToStr(state, construct, j);
+                let key = nextStateToStr(state, construct);
+                let tstate = this.tracker[key];
+                if (tstate) {
+                    totreward += rescale(tstate.reward);
+                }               
+                total += totreward;
+                rv.push(totreward);
+            }
+            if (extras) {
+                for (let i = 0; i < extras.length; ++i) {
+                    let construct = extras[i];
+                    let key = nextStateToStr(state, construct, 0);
                     let tstate = this.tracker[key];
+                    let totreward = 0;
                     if (tstate) {
                         totreward += rescale(tstate.reward);
                     }
+                    total += totreward;
+                    rv.push(totreward);
                 }
-                totreward = totreward / sz;
-                total += totreward;
-                rv.push(totreward);
-            }
-            for (let i = 0; i < extras.length; ++i) {
-                let construct = extras[i];
-                let key = nextStateToStr(state, construct, 0);
-                let tstate = this.tracker[key];
-                let totreward = 0;
-                if (tstate) {
-                    totreward = rescale(tstate.reward);
-                }
-                total += totreward;
-                rv.push(totreward);
-            }
+            }            
             return [rv, total];
 
         }
 
         startState() {
-            return { parent: "START", grandpa: "", idx: 0, depth: 0 };
+            return { parent: "START", parentIdx: 0 , grandpa: "", idx: 0, depth: 0 };
         }
         trackAction(state, node) {
             let key = stateToStr(state);
@@ -1067,7 +1075,7 @@
             childidx = childidx || 0;
             let action = getLabel(node);
 
-            return { parent: action, grandpa: state.parent, idx: childidx, depth: state.depth + 1, pred: state };
+            return { parent: action, grandpa: state.parent, parentIdx:state.idx , idx: childidx, depth: state.depth + 1, pred: state };
         }
         failedAction(state, action) {
             //console.log(stateToStr(state), getLabel(action));
@@ -1427,11 +1435,11 @@
                     } else {
                         rv = new FunN(construct.name, construct.imp, construct.abstract, args);
                     }
+                    oldState = cc.advance(rv, localenv);
                     if (!tc.addConstraint(expectedType, construct.returntype, rv.id)) {
                         return new Error(0);
                     }
-                    rv.state = state;
-                    oldState = cc.advance(rv, localenv);
+                    rv.state = state;                   
                     st.trackAction(state, rv);
                     if (n == 0) {
                         rv.childstate = st.transition(state, rv, 0);
@@ -1456,13 +1464,13 @@
                 }
                 if (construct.kind == "int") {
                     let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
-                    let rv = new IntN(randval);                    
+                    let rv = new IntN(randval);                                        
+                    oldState = cc.advance(rv, localenv);
+                    rv.state = state;
+                    rv.childstate = st.transition(state, rv, 0);
                     if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
                         return new Error(0);
                     }
-                    rv.state = state;
-                    rv.childstate = st.transition(state, rv, 0);
-                    oldState = cc.advance(rv, localenv);
                     return rv;
                 }
                 if (construct.kind == "lambda") {
@@ -1697,6 +1705,51 @@
             }
 
         }
+
+
+        function runAndFixB(language, examples, prog, bound, budget) {
+            let bestSolution = undefined;
+            let bestOutput = undefined;
+            let bestScore = 100000;//score is an error, so bigger is worse.
+            let out = runOrLocalize(examples, prog, bound);
+            function solprint() {
+                let sol = this;
+                return sol.prog.print() + " : " + sol.status + " : " + sol.budget + " crashing:" + sol.crashing;
+
+            }
+            let crashing = 0;
+            while (budget > 0) {
+                if (isBadResult(out)) {
+                    throw "Should never happen";
+
+                } else {
+                    let score = scoreOutputs(examples, out)
+                    st.scoreTree(prog, (1 - score) * 100);
+                    log(1, budget + " Score:", score, prog.print());
+                    if (score < threshold) {
+                        //All outputs correct enough, we are done!
+                        //return an object with the program, the status, the score, and the budget. 
+                        //it also has a print function that returns a string representation of the object.
+                        return { prog: prog, status: "CORRECT", score: score, budget: budget, crashing: crashing, print: solprint };
+                    } else {
+                        if (score < bestScore || (score == bestScore && Math.random() > 0.75)) {
+                            //If we are better than the best score, we don't want to lose this solution.
+                            bestScore = score;
+                            bestSolution = prog;
+                            bestOutput = out;
+                            log(1, "New best solution", score, bestSolution.print());
+                        }
+                        prog = randomProgram(language, bound); //randomizeClone(language, prog, bound);
+                        --budget;
+                        out = runOrLocalize(examples, prog, bound);
+                    }
+
+                }
+
+            }
+            return { prog: bestSolution, status: "INCORRECT", score: bestScore, budget: 0, crashing: crashing, print: solprint };            
+        }
+
 
 
         function runAndFix(language, examples, prog, bound, budget) {
