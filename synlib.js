@@ -1724,7 +1724,7 @@
         }
 
 
-        function runAndFixB(language, examples, prog, bound, budget) {
+        function runAndFix(language, examples, prog, bound, budget) {
             let bestSolution = undefined;
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
@@ -1769,7 +1769,7 @@
 
 
 
-        function runAndFix(language, examples, prog, bound, budget) {
+        function runAndFixB(language, examples, prog, bound, budget) {
             let bestSolution = undefined;
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
