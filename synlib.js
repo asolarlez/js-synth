@@ -321,6 +321,10 @@
             this.constraints = {};
         }
 
+        reset() {
+            this.constraints = {};
+        }
+
         checkpoint() {
             //return a clone of the constraints object
             //return Object.assign({}, this.constraints);
@@ -370,9 +374,29 @@
                 }
             });            
         }
+
+        localConvert(type, limit) {
+            if (type instanceof Primitive) {
+                return type;
+            }
+            if (limit == undefined) { limit = 20; }
+            if (limit <= 0) {
+                throw "Too much";
+            }            
+            return type.replaceVar((t) => {               
+                let ts = t.toString();
+                if (ts in this.constraints) {
+                    return this.localConvert(this.constraints[ts], limit - 1);
+                } else {
+                    return t;
+                }
+            });  
+        }
+
+
         constraint(ta, tb) {
             if (ta in this.constraints) {
-                let alt = this.constraints[ta];
+                let alt = this.localConvert(this.constraints[ta]);                
                 if (alt instanceof TypeVar) {                    
                     if (!(tb instanceof TypeVar)) {
                         //We need to check if the parametric doesn't contain alt internally, because then it wouldn't be compatible.
@@ -447,20 +471,21 @@
                         if (tbs in this.constraints) {
                             //Both already have constraints. We need to check if they are compatible.
                             //If they are not, then we are done and return false.
-                            let rv = this.unify(this.constraints[tas], this.constraints[tbs]);
+                            let converted = this.localConvert(this.constraints[tbs]);
+                            let rv = this.unify(this.constraints[tas], converted);
                             if (!rv) {
                                 return false;
                             }
                             //If they are compatible, we just pick one to point to the other.
-                            return this.constraint(tas, this.constraints[tbs]);
+                            return this.constraint(tas, converted);
                         } else {
                             //Easy, ta has constraints, tb does not. We just point tb to ta.
-                            return this.constraint(tbs, this.constraints[tas]);
+                            return this.constraint(tbs, this.localConvert(this.constraints[tas]));
                         }
                     } else {
                         if (tbs in this.constraints) {
                             //Easy, tb has constraints, ta does not. We just point ta to tb.
-                            return this.constraint(tas, this.constraints[tbs]);
+                            return this.constraint(tas, this.localConvert(this.constraints[tbs]));
                         } else {
                             //None of them has constraints, we just point one to the other.
                             return this.constraint(tas, tb);
@@ -469,10 +494,10 @@
 
                 }
                 if (tb instanceof Parametric) {
-                    return this.constraint(ta.toString(), tb); 
+                    return this.constraint(ta.toString(), this.localConvert(tb)); 
                 }
                 if (tb instanceof FunctionType) {
-                    return this.constraint(ta.toString(), tb);                    
+                    return this.constraint(ta.toString(), this.localConvert(tb));                    
                 }
             }
             if (ta instanceof Parametric) {
@@ -480,7 +505,7 @@
                     return false;
                 }
                 if (tb instanceof TypeVar) {                    
-                    return this.constraint(tb.toString(), ta);
+                    return this.constraint(tb.toString(), this.localConvert(ta));
                 }
                 if (tb instanceof Parametric) {
                     if (ta.name != tb.name) {
@@ -505,7 +530,7 @@
                     return false;
                 }
                 if (tb instanceof TypeVar) {
-                    return this.constraint(tb.toString(), ta);
+                    return this.constraint(tb.toString(), this.localConvert(ta));
                 }
                 if (tb instanceof Parametric) {
                     return false;
@@ -803,6 +828,7 @@
          */
         eval(level, inputs, envt) {
             return (x) => {
+                // let newenv = [x].concat(envt);
                 let newenv = envt.slice(0);
                 newenv.push(x);
                 let rv = this.body.eval(level - 1, inputs, newenv);
@@ -1097,12 +1123,16 @@
         failedAction(state, action) {
             //console.log(stateToStr(state), getLabel(action));
         }
-        scoreTree(node, score) {
+        scoreTree(node, score) {        
+            if (score <= 0) { return; }
             let tracker = this.tracker;
             function scoreF(key) {
                 if (key in tracker) {
                     let q = tracker[key];
-                    q.reward = (q.reward * q.scores + score) / (q.scores + 1);
+                    if (score > q.reward) {
+                        q.reward = score;
+                    }
+                      // q.reward =  (q.reward * q.scores + score) / (q.scores + 1);
                     q.scores++;
                 } else {
                     let tr = {
@@ -1121,6 +1151,7 @@
             });
         }
         failedState(state) {
+            return;
             let score = -100;
             let tracker = this.tracker;
             function scoreF(key) {
@@ -1737,6 +1768,7 @@
             let crashing = 0;
             while (budget > 0) {
                 if (isBadResult(out)) {
+                    console.log(prog.print());
                     throw "Should never happen";
 
                 } else {
@@ -1756,6 +1788,7 @@
                             bestOutput = out;
                             log(1, "New best solution", score, bestSolution.print());
                         }
+                        tc.reset();
                         prog = randomProgram(language, bound); //randomizeClone(language, prog, bound);
                         --budget;
                         out = runOrLocalize(examples, prog, bound);

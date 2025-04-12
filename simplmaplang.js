@@ -280,23 +280,27 @@ let maplanguage = [
 ]
 let problems = {
     "mapincrement": {
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
         io: [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
             { in: { x: [5, 6, 9] }, out: [6, 7, 10] }],
         depth: 4
     },
     "reducebasic": {
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
         io: [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
             { in: { x: [7, 0, 0] }, out: 7 }],
         depth: 4
     },
     "2dreduce": {
+        intypes: [{ kind: "input", name: "x", type: Tp("list[list[int]]") }],
         io:[{ in: { x: [[1, 2], [3, 4]] }, out: [3, 7] },
         { in: { x: [[5, 6], [9, 10]] }, out: [11, 19] },
             { in: { x: [[7, 0], [1, 2, 3], [2, 3]] }, out: [7, 6, 5] }],
         depth:6
     },
     "prodreduce": {
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
         io:[{ in: { x: [1, 2, 3] }, out: 6 },
             { in: { x: [5, 2, 3] }, out: 30 },
             { in: { x: [7, 0, 0] }, out: 0 }],
@@ -309,13 +313,18 @@ let problems = {
 function runOne(p) {
     let problem = problems[p];
     console.log("Problem ", p);
-    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], problem.io, maplanguage, score, 0.001, problem.depth, 10000);
+    let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 10000);
     console.log(p, " Solution ", sol.print());;
     for (let i = 0; i < problems[p].length; ++i) {
         console.log("Input: ", problems[p][i].in.x);
         console.log("Output:", sol.prog.eval(3, problems[p][i].in, []));
         console.log("Target:", problems[p][i].out);
     }
+}
+
+
+function r2r() {
+    runOne("2dreduce");
 }
 
 
@@ -360,5 +369,5 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
-    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne };
+    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne, r2r };
 }
