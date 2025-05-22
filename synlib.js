@@ -1,11 +1,11 @@
 ﻿(() => {
 
 
-    let verbosity = 2;
+    let verbosity = 0;
 
-    function log(level, msg1, msg2, msg3) {
+    function log(level, msg1, msg2, msg3, msg4) {
         if (level <= verbosity) {
-            console.log(msg1, msg2, msg3);
+            console.log(msg1, msg2, msg3, msg4);
         }
     }
 
@@ -23,7 +23,7 @@
         return rv;
     }
 
-    Math.random = debugRandom;
+    //Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
@@ -358,7 +358,13 @@
             return true;
         }
 
-
+        /**
+         * This function takes a type and replaces any type variables that have been constrained to a concrete type.        
+         * @param {any} type
+         * @param {any} id
+         * @param {any} limit
+         * @returns
+         */
         convert(type, id, limit) {
             if (limit == undefined) { limit = 20; }
             if (limit <= 0) {
@@ -374,7 +380,14 @@
                 }
             });            
         }
-
+        /**
+         * This function is similar to convert, but it assumes that the type variables aready have their id set. 
+         * This is only used internally when generating constraints to avoid converting a type variable to another type variable 
+         * when it is possible to convert it all the way to a primitive.
+         * @param {any} type
+         * @param {any} limit
+         * @returns
+         */
         localConvert(type, limit) {
             if (type instanceof Primitive) {
                 return type;
@@ -405,11 +418,11 @@
                             this.constraints[alt.toString()] = tb;
                             return true;
                         } else {
-                            console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");                            
+                            //console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");                            
                             return false;
                         }
                     }
-                    console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");
+                    //console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");
                     throw "NYI";
                     return false;
                 } else {
@@ -421,7 +434,7 @@
                     if (tb instanceof TypeVar) {                        
                         return this.constraint(tbs, alt);                        
                     }
-                    console.log("Trying to unify " + ta + " with " + tb.toString() + " but it's already constrained to " + alt);
+                    //console.log("Trying to unify " + ta + " with " + tb.toString() + " but it's already constrained to " + alt);
                     if (alt instanceof Parametric && !(tb instanceof Parametric)) {
                         return false;
                     }      
@@ -652,6 +665,10 @@
 
     let INSTID = 0;
 
+    /**
+     * 
+     * This is the base class for all AST nodes, which is used to represent the actual programs being synthesized.
+     */
     class AST {
         constructor(kind) {
             this.kind = kind;
@@ -663,6 +680,15 @@
         setState(state) {
             this.state = state;
             return this;
+        }
+        /**
+         * If the AST node has a type, this function will apply tc.convert to it.
+         * @param {any} tc
+         */
+        typeConvert(tc) {
+            if (this.type) {
+                this.type = tc.convert(this.type, this.id);
+            }
         }
     }
 
@@ -685,7 +711,9 @@
     }
 
     ROOT = new Root();
-
+    /**
+     * Class representing a function node in the AST.
+     */
     class FunN extends AST {
         constructor(name, imp, abstract, args) {
             super("fun");
@@ -758,16 +786,31 @@
             }
             return true;
         }
+        /**
+         * Needs to run type convert on the arguments as well, not just itself.
+         * @param {any} tc
+         */
+        typeConvert(tc) {
+            super.typeConvert(tc);
+            for (let i in this.args) {
+                this.args[i].typeConvert(tc);
+            }
+        }
     }
 
-
+    /**
+     * This class represents a parametric function. This is a function with tunable parameters which need to be discovered by the synthesizer.
+     * The big difference with the constructor of FunN is that the imp and abstract functions are replaced by impP and abstractP which 
+     * are function generators that take the parameters as input and produce the actual imp and abstract functions as output. These generators are kept around as 
+     * impP and abstractP so they can be used to generate new versions of the actual functions with different parameters when needed.
+     */
     class pFunN extends FunN {
-        constructor(name, imp, abstract, args, param) {
-            super(name, imp(param), abstract(param), args);
+        constructor(name, impP, abstractP, args, param) {
+            super(name, impP(param), abstractP(param), args);
             this.parametric = true;
             this.param = param;
-            this.impP = imp;
-            this.abstractP = abstract;
+            this.impP = impP;
+            this.abstractP = abstractP;
         }
         isParametric() {
             return true;
@@ -870,6 +913,14 @@
                 return false;
             }
             return this.body.equals(other.body);
+        }
+        /**
+         * Needs to run type convert on the arguments as well, not just itself.
+         * @param {any} tc
+         */
+        typeConvert(tc) {
+            super.typeConvert(tc);
+            this.body.typeConvert(tc);            
         }
     }
 
@@ -1064,13 +1115,17 @@
             function rescale(score) {
                 return (Math.tanh(score / 100) + 1) / 2;
             }
+            let zeroR = rescale(0);
             for (let i = 0; i < language.length; ++i) {
                 let construct = language[i];                
                 let totreward = 0;
                 let key = nextStateToStr(state, construct);
                 let tstate = this.tracker[key];
+                
                 if (tstate) {
                     totreward += rescale(tstate.reward);
+                } else {
+                    totreward += zeroR;
                 }               
                 total += totreward;
                 rv.push(totreward);
@@ -1604,7 +1659,8 @@
                     }
                 } else {
 
-                    out.type = expectedType? tc.convert(expectedType, out.id) : undefined;
+                    out.type = expectedType;
+                    out.typeConvert(tc);                    
                     return out;
                 }
             }
@@ -1755,7 +1811,126 @@
         }
 
 
-        function runAndFix(language, examples, prog, bound, budget) {
+
+        /**
+         * The general strategy for this function is that we keep a worklist of N programs sorted from best to worst.
+         * At each step, we randomly pick a program from the worklist. If the program is in the bottom half (bad), 
+         * we simply replace it with a new random program. If the program is in the top half (good), we wiggle it 
+         * a little, and if it improves, we add it in place of the worse program, and if it doesn't improve, we drop it.
+         * @param {any} language
+         * @param {any} examples
+         * @param {any} prog
+         * @param {any} bound
+         * @param {any} budget
+         */
+        function randomAndHillClimb(language, examples, prog, bound, budget) {
+            let beamsize = 10;
+            let out = runOrLocalize(examples, prog, bound);
+            if (isBadResult(out)) {
+                console.log(prog.print());
+                throw "Should never happen";
+            }
+            function solprint() {
+                let sol = this;
+                return sol.prog.print() + " : " + sol.status + " budget: " + sol.budget + " score: " + sol.score;
+
+            }
+            let score = scoreOutputs(examples, out);
+            let workList = [];
+            for (let i = 0; i < beamsize; ++i) {
+                let newprog = randomProgram(language, bound);
+                out = runOrLocalize(examples, newprog, bound);
+                score = scoreOutputs(examples, out);
+                st.scoreTree(newprog, (1 - score) * 100);
+                workList.push({ prog: newprog, score: score });
+            }
+            // sort so that the lowest score is workList[0]
+            workList.sort((a, b) => a.score - b.score); 
+            while (budget > 0) {
+                tc.reset();
+                --budget;
+                let idx = Math.floor(Math.random() * beamsize);
+                let prog = workList[idx].prog;
+                log(3, "original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
+                const probReplace = 0.5;
+                if (Math.random() < probReplace) {
+                    let adjusted = randomProgram(language, bound);
+                    if (adjusted instanceof Error) {
+                        console.log("randomAndHillClimb1 FAILED")
+                        return;
+                    }
+                    out = runOrLocalize(examples, adjusted, bound);
+                    score = scoreOutputs(examples, out);
+                    st.scoreTree(adjusted, (1 - score) * 100);
+                    log(3, "After mod ", adjusted.print(), "score", score);
+                    //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
+                    //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
+                    if (score < 1 && score <= workList[beamsize - 1].score) {
+                        for (let i = 0; i < beamsize; ++i) {
+                            if (workList[i].score == workList[beamsize - 1].score) { // reached the first worst one.
+                                // If i == beamsize - 1, we are replacing the last one in the list.
+                                //otherwise, we pick one at random between i and beamsize - 1.
+                                if (i == beamsize - 1) {
+                                    workList[i] = { prog: adjusted, score: score };
+                                } else {
+                                    //pick one at random between i and beamsize - 1.
+                                    let idx = Math.floor(Math.random() * (beamsize - i)) + i;
+                                    workList[idx] = { prog: adjusted, score: score };
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    //We don't replace, we improve.
+                    let adjusted = randomizeClone(language, workList[idx].prog, bound);
+                    if (adjusted instanceof Error) {
+                        console.log("randomAndHillClimb1 FAILED")
+                        return;
+                    }
+                    out = runOrLocalize(examples, adjusted, bound);
+                    score = scoreOutputs(examples, out);
+                    st.scoreTree(adjusted, (1 - score) * 100);
+                    log(3, "After mod ", adjusted.print(), "score", score);
+                    if (score < workList[idx].score) {// good. The new program is better than the old one. replace
+                        workList[idx] = { prog: adjusted, score: score };
+                    } else if (score < workList[beamsize - 1].score) {
+                        //bad. The new program is worse than the old one, but better than the worst one in the list.
+                        //workList[beamsize - 1] = { prog: adjusted, score: score };
+                    } // otherwise just drop the adjusted one.
+                }
+
+
+
+                if (idx < beamsize / 2) { // testing one of the good ones                    
+                   
+                } else {
+                    // testing one of the bad ones
+                    
+                }   
+                workList.sort((a, b) => a.score - b.score); 
+                if (workList[0].score < threshold) {
+                    //All outputs correct enough, we are done!
+                    //return an object with the program, the status, the score, and the budget. 
+                    //it also has a print function that returns a string representation of the object.
+                    return { prog: workList[0].prog, status: "CORRECT", score: workList[0].score, budget: budget, crashing: 0, print: solprint };
+                }
+            }
+            return { prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, budget: budget, crashing: 0, print: solprint };
+        }
+
+
+
+        /**
+         * This is a synthesis strategy that randomly generates programs until it finds one that works.
+         * @param {any} language
+         * @param {any} examples
+         * @param {any} prog
+         * @param {any} bound
+         * @param {any} budget
+         * @returns { prog: bestSolution, status: "INCORRECT"|"CORRECT", score: bestScore, budget: 0, crashing: how many times has it crashed?, print: solprint };
+         */
+        function randomRandom(language, examples, prog, bound, budget) {
             let bestSolution = undefined;
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
@@ -1770,7 +1945,6 @@
                 if (isBadResult(out)) {
                     console.log(prog.print());
                     throw "Should never happen";
-
                 } else {
                     let score = scoreOutputs(examples, out)
                     st.scoreTree(prog, (1 - score) * 100);
@@ -1985,9 +2159,13 @@
 
         let langWithInputs = processLanguage(language, inputspec);
 
-        let rp = randomProgram(langWithInputs, bound);       
+        let rp = randomProgram(langWithInputs, bound);     
 
-        let rv = runAndFix(langWithInputs, examples, rp, bound, N);
+
+
+        let synthesizer = randomAndHillClimb; // randomRandom;
+
+        let rv = synthesizer(langWithInputs, examples, rp, bound, N);
 
         return rv;
 
