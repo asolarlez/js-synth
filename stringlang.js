@@ -56,7 +56,7 @@ function substrBody(startA, startB, endA, endB, idx, input) {
     return input.substring(start, end);
 }
 
-let regexpChoices = [/\(/, /\)/, /[a-zA-Z]/, /[0-9]/, /\s/, new RegExp("")];
+let regexpChoices = [/\(/, /\)/, /[a-zA-Z]/, /[0-9]/, /\s|^|$/, new RegExp("")];
 
 let strlanguage = [    
     {
@@ -212,18 +212,70 @@ function stringScore(examples, outputs) {
     return output / outputs.length;
 }
 
+const problems = {
+
+    "parenthesis": {
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        io: [{ in: { x: "(hello) world" }, out: "hello" },
+        { in: { x: "this is (the) word" }, out: "the" },
+            { in: { x: "a (good) example" }, out: "good" },
+            { in: { x: "a good (example)" }, out: "example" }],
+        depth: 3
+    },
+    "outer-parenthesis": {
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        io: [{ in: { x: "(hello) world" }, out: "(hello)" },
+        { in: { x: "this is (the) word" }, out: "(the)" },
+        { in: { x: "a (good) example" }, out: "(good)" }],
+        depth: 3
+    },
+    "numbers": {
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        io: [{ in: { x: "(hello) world 57" }, out: "57" },
+        { in: { x: "this is (the) word 33" }, out: "33" },
+        { in: { x: "a (good) example 22" }, out: "22" }],
+        depth: 3
+    },
+    "combined": {
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        io: [{ in: { x: "(hello) world 57" }, out: "hello57" },
+        { in: { x: "this is (the) word 33" }, out: "the33" },
+        { in: { x: "a (good) example 22" }, out: "good22" }],
+        depth: 3
+    }
+
+}
+
+
+function runOne(p, verbose) {
+    let problem = problems[p];
+    console.log("Problem ", p);
+    let sol = synthesize(problem.intypes, problem.io, strlanguage, stringScore, 0.001, problem.depth, 40000);
+    console.log(p, " Solution ", sol.print());;
+    if (verbose) {
+        for (let i = 0; i < problems[p].io.length; ++i) {
+            console.log("Input: ", problems[p].io[i].in.x);
+            console.log("Output:", sol.prog.eval(3, problems[p].io[i].in, []));
+            console.log("Target:", problems[p].io[i].out);
+        }
+    }    
+    return sol;
+}
+
+
+
+
+function runAll(verbose) {
+    let sols = {};
+    for (let p in problems) {
+        let rv = runOne(p, verbose);
+        sols[p] = rv;
+    }
+    return sols;
+}
 
 function run() {
-    let examples = [{ in: { x: "(hello) world" }, out: "hello" },
-    { in: { x: "this is (the) word" }, out: "the" },
-    { in: { x: "a (good) example" }, out: "good" }];
-    let sol = synthesize([{ kind: "input", name: "x" }], examples, strlanguage, stringScore, 0.001, 3, 300);
-    console.log("Solution ", sol.print());
-    for (let i = 0; i < examples.length; ++i) {
-        console.log("Input: ", examples[i].in.x);
-        console.log("Output:", sol.prog.eval(3, examples[i].in, []));
-        console.log("Target:", examples[i].out);
-    }
+    runOne("combined");
 }
 
 

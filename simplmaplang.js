@@ -310,29 +310,34 @@ let problems = {
 
 
 
-function runOne(p) {
+function runOne(p, verbose) {
     let problem = problems[p];
     console.log("Problem ", p);
     let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 10000);
     console.log(p, " Solution ", sol.print());;
-    for (let i = 0; i < problems[p].length; ++i) {
-        console.log("Input: ", problems[p][i].in.x);
-        console.log("Output:", sol.prog.eval(3, problems[p][i].in, []));
-        console.log("Target:", problems[p][i].out);
-    }
+    if (verbose) {
+        for (let i = 0; i < problems[p].io.length; ++i) {
+            console.log("Input: ", problems[p].io[i].in.x);
+            console.log("Output:", sol.prog.eval(3, problems[p].io[i].in, []));
+            console.log("Target:", problems[p].io[i].out);
+        }
+    }    
+    return sol;
 }
 
 
-function r2r() {
-    runOne("2dreduce");
+function r2r(verbose) {
+    runOne("2dreduce", verbose);
 }
 
 
-function runAll(){
+function runAll(verbose) {
+    let sols = {};
     for (let p in problems) {
-        runOne(p);
+        let rv = runOne(p, verbose);
+        sols[p] = rv;
     }
-
+    return sols;
 }
 
 

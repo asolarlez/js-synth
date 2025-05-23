@@ -2,8 +2,36 @@
 
 // Import the synlib module
 var simplmaplang = require('./simplmaplang.js');
+var stringlang = require('./stringlang.js');
 
+function runExperiments() {
+    let aggregated = {};
+    function addToAggregated(result) {
+        for (let name in result) {
+            if (aggregated[name] === undefined) {
+                aggregated[name] = [];
+            }
+            aggregated[name].push(result[name]);
+        }        
+    }
+    for (let i = 0; i < 20; i++) {
+        let simpRes = simplmaplang.runAll();
+        let strlRes = stringlang.runAll();
+        addToAggregated(simpRes);
+        addToAggregated(strlRes);
 
+    }
+    function printAggregateStats(aggregated) {
+        for (let name in aggregated) {
+            let values = aggregated[name];            
+            let cost = values.reduce((a, b) => b.cost + a, 0);            
+            let corrects = values.reduce((a, b) => (b.status == "CORRECT" ? 1 : 0) + a, 0);
+            let avgCost = cost / values.length;
+            let fracCorrect = corrects / values.length;
+            console.log(`${name}: avgCost = ${avgCost}, fracCorrect = ${fracCorrect}`);
+        }
+    }
+    printAggregateStats(aggregated);
+}
 
-
-simplmaplang.runAll();
+runExperiments();

@@ -1810,6 +1810,12 @@
 
         }
 
+        function solprint() {
+            let sol = this;
+            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print();
+
+        }
+
 
 
         /**
@@ -1826,14 +1832,11 @@
         function randomAndHillClimb(language, examples, prog, bound, budget) {
             let beamsize = 10;
             let out = runOrLocalize(examples, prog, bound);
+            const initBudget = budget;
+
             if (isBadResult(out)) {
                 console.log(prog.print());
                 throw "Should never happen";
-            }
-            function solprint() {
-                let sol = this;
-                return sol.prog.print() + " : " + sol.status + " budget: " + sol.budget + " score: " + sol.score;
-
             }
             let score = scoreOutputs(examples, out);
             let workList = [];
@@ -1844,6 +1847,7 @@
                 st.scoreTree(newprog, (1 - score) * 100);
                 workList.push({ prog: newprog, score: score });
             }
+            budget -= beamsize;
             // sort so that the lowest score is workList[0]
             workList.sort((a, b) => a.score - b.score); 
             while (budget > 0) {
@@ -1913,10 +1917,10 @@
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
                     //it also has a print function that returns a string representation of the object.
-                    return { prog: workList[0].prog, status: "CORRECT", score: workList[0].score, budget: budget, crashing: 0, print: solprint };
+                    return { prog: workList[0].prog, status: "CORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
                 }
             }
-            return { prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, budget: budget, crashing: 0, print: solprint };
+            return { prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
         }
 
 
@@ -1935,11 +1939,8 @@
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
             let out = runOrLocalize(examples, prog, bound);
-            function solprint() {
-                let sol = this;
-                return sol.prog.print() + " : " + sol.status + " : " + sol.budget + " crashing:" + sol.crashing;
-
-            }
+            const initBudget = budget;
+            
             let crashing = 0;
             while (budget > 0) {
                 if (isBadResult(out)) {
@@ -1953,7 +1954,7 @@
                         //All outputs correct enough, we are done!
                         //return an object with the program, the status, the score, and the budget. 
                         //it also has a print function that returns a string representation of the object.
-                        return { prog: prog, status: "CORRECT", score: score, budget: budget, crashing: crashing, print: solprint };
+                        return { prog: prog, status: "CORRECT", score: score, cost: initBudget - budget, initBudget: initBudget, crashing: crashing, print: solprint };
                     } else {
                         if (score < bestScore || (score == bestScore && Math.random() > 0.75)) {
                             //If we are better than the best score, we don't want to lose this solution.
@@ -1971,7 +1972,7 @@
                 }
 
             }
-            return { prog: bestSolution, status: "INCORRECT", score: bestScore, budget: 0, crashing: crashing, print: solprint };            
+            return { prog: bestSolution, status: "INCORRECT", score: bestScore, cost: initBudget, initBudget: initBudget, crashing: crashing, print: solprint };            
         }
 
 
