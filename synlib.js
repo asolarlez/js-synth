@@ -1817,6 +1817,83 @@
         }
 
 
+        function smcSynth(language, examples, prog, bound, budget) {
+            let beamsize = 20;
+            let out; 
+            const initBudget = budget;
+            let score; 
+            let workList = [];
+            let bestProgram;
+            let bestScore = 100000;
+            let totalScore = 0;
+            function mass(score) {
+                return Math.exp(-3 * score);
+            }
+            for (let i = 0; i < beamsize; ++i) {
+                tc.reset();
+                let newprog = randomProgram(language, bound);
+                out = runOrLocalize(examples, newprog, bound);
+                score = scoreOutputs(examples, out);
+                st.scoreTree(newprog, (1 - score) * 100);
+                workList.push({ prog: newprog, score: score });
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestProgram = newprog;
+                }
+                totalScore += mass(score);
+            }
+            budget -= beamsize;
+            workList.sort((a, b) => a.score - b.score);
+            while (budget > 0) {                
+                let candidates = [];
+                for (let idx in workList) {
+                    let c = workList[idx];
+                    let n = Math.ceil((beamsize * mass(c.score)) / totalScore)
+                    for (let i = 0; i < n; ++i) {
+                        if (candidates.length < beamsize) {
+                            candidates.push(c);
+                        }                        
+                    }
+                }
+                totalScore = 0;
+                workList = candidates.map((entry) => {
+                    tc.reset();
+                    let adjusted = randomizeClone(language, entry.prog, bound);
+                    if (adjusted instanceof Error) {
+                        console.log("randomAndHillClimb1 FAILED")
+                        return adjusted;
+                    }
+                    out = runOrLocalize(examples, adjusted, bound);
+                    score = scoreOutputs(examples, out);
+                    st.scoreTree(adjusted, (1 - score) * 100);
+                    totalScore += mass(score);
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestProgram = adjusted;
+                    }
+                    return { prog: adjusted, score: score };
+                });
+                
+                budget -= beamsize;
+                if (bestScore < threshold) {
+                    //All outputs correct enough, we are done!
+                    //return an object with the program, the status, the score, and the budget. 
+                    //it also has a print function that returns a string representation of the object.
+                    return { prog: bestProgram, status: "CORRECT", score: bestScore, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+                }
+                workList.sort((a, b) => a.score - b.score);
+
+                //let disp = workList.reduce((acc, b) => acc + "" + b.score + ",", "");
+                //console.log(disp);
+
+            }
+            return { prog: bestProgram, status: "INCORRECT", score: bestScore, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+
+
+        }
+
+
+
 
         /**
          * The general strategy for this function is that we keep a worklist of N programs sorted from best to worst.
@@ -1841,6 +1918,7 @@
             let score = scoreOutputs(examples, out);
             let workList = [];
             for (let i = 0; i < beamsize; ++i) {
+                tc.reset();
                 let newprog = randomProgram(language, bound);
                 out = runOrLocalize(examples, newprog, bound);
                 score = scoreOutputs(examples, out);
@@ -1850,6 +1928,24 @@
             budget -= beamsize;
             // sort so that the lowest score is workList[0]
             workList.sort((a, b) => a.score - b.score); 
+
+            function replaceWorst(adjusted, score) {
+                for (let i = 0; i < beamsize; ++i) {
+                    if (workList[i].score == workList[beamsize - 1].score) { // reached the first worst one.
+                        // If i == beamsize - 1, we are replacing the last one in the list.
+                        //otherwise, we pick one at random between i and beamsize - 1.
+                        if (i == beamsize - 1) {
+                            workList[i] = { prog: adjusted, score: score };
+                        } else {
+                            //pick one at random between i and beamsize - 1.
+                            let idx = Math.floor(Math.random() * (beamsize - i)) + i;
+                            workList[idx] = { prog: adjusted, score: score };
+                        }
+                        break;
+                    }
+                }
+            }
+
             while (budget > 0) {
                 tc.reset();
                 --budget;
@@ -1869,21 +1965,8 @@
                     log(3, "After mod ", adjusted.print(), "score", score);
                     //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
                     //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
-                    if (score < 1 && score <= workList[beamsize - 1].score) {
-                        for (let i = 0; i < beamsize; ++i) {
-                            if (workList[i].score == workList[beamsize - 1].score) { // reached the first worst one.
-                                // If i == beamsize - 1, we are replacing the last one in the list.
-                                //otherwise, we pick one at random between i and beamsize - 1.
-                                if (i == beamsize - 1) {
-                                    workList[i] = { prog: adjusted, score: score };
-                                } else {
-                                    //pick one at random between i and beamsize - 1.
-                                    let idx = Math.floor(Math.random() * (beamsize - i)) + i;
-                                    workList[idx] = { prog: adjusted, score: score };
-                                }
-                                break;
-                            }
-                        }
+                    if (score < 1 && (score <= workList[beamsize - 1].score  || Math.random() < 0.1  )) {
+                        replaceWorst(adjusted, score);                                                
                     }
                 } else {
                     //We don't replace, we improve.
@@ -2164,7 +2247,7 @@
 
 
 
-        let synthesizer = randomAndHillClimb; // randomRandom;
+        let synthesizer = smcSynth; // randomAndHillClimb; // randomRandom;
 
         let rv = synthesizer(langWithInputs, examples, rp, bound, N);
 
