@@ -1098,7 +1098,7 @@
         randomConstruct(state, language, extras) {
             
             let key = stateToStr(state);
-            
+            let pckey = key + ":" + state.idx;
             function uniform() {
                 let el = 0;
                 if (extras) {
@@ -1111,8 +1111,8 @@
             
             let total;
             let scores;
-            if (key in this.policyCache) {
-                let tmp = this.policyCache[key];
+            if (pckey in this.policyCache) {
+                let tmp = this.policyCache[pckey];
                 total = tmp.total;
                 scores = tmp.scores;
                 let el = 0;
@@ -1125,7 +1125,7 @@
                             return uniform();
                         }
                         scores = scores[0];
-                        this.policyCache[key] = { scores: scores, total: total };
+                        this.policyCache[pckey] = { scores: scores, total: total };
                     }                        
                 }
                 if (scores.length > language.length + el) {
@@ -1147,7 +1147,7 @@
                     return uniform();
                 }
                 scores = scores[0];
-                this.policyCache[key] = { scores: scores, total: total };
+                this.policyCache[pckey] = { scores: scores, total: total };
             }
 
             let rnd = Math.random();
@@ -1176,7 +1176,9 @@
             let rv = [];
             let total = 0;
             function rescale(score) {
-                return (Math.tanh(score / 100) + 1) / 2;
+                //(tanh((x-50)/ 50) + 1) / 2
+                //(Math.tanh(score / 100) + 1) / 2;
+                return (Math.tanh((score - 50) / 50) + 1) / 2;
             }
             let zeroR = rescale(0);
             for (let i = 0; i < language.length; ++i) {
@@ -1528,9 +1530,52 @@
 
 
 
+    class NullConstraintChecker {
+        constructor() {            
+        }
+
+        print() {
+           
+        }
+
+
+
+        addConstraint(badRes, envt, limit) {
+           
+        }
+
+        /**
+         * 
+         * 
+         * @param {any} nodeType
+         * @param {any} id
+         * @param {any} stage Can be "enter" or "return"
+         * @returns 
+         */
+        checkStep(node, envt) {
+            return true;
+        }
+        reset() {
+            
+        }
+        advance(node, envt) {
+            
+        }
+
+        retract(oldState) {
+           
+        }
+        goback(node) {
+            
+        }
+
+    }
+
+
+
 
     function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N) {
-        let cc = new ConstraintChecker();
+        let cc = new NullConstraintChecker();
         let st = new StatsTracker();
         let tc = new TypeChecker();
         function randomProgram(language, bound, extras, localenv, state, expectedType, initialBound) {
@@ -1687,6 +1732,7 @@
                 }
             }
             let attempts = 0;
+            let pbound = 1 / Math.pow(2, bound);
             while (construct) {
                 ++attempts;
                 let out = fleshOutConstruct(construct);
@@ -1704,7 +1750,7 @@
                         //We flip a biased coin to either retry at this level or go back to the previous level.
                         //The lower the bound, the more likely we are to go back to the previous level.
                         let mr = Math.random();
-                        if (initialBound == bound || (mr > 1 / Math.pow(2, bound) && attempts < 5)) {
+                        if (initialBound == bound || (mr > pbound && attempts < 5)) {
                             //retry at this level. Since we retry with random, we re-initialize the initial construct.
                             construct = st.randomConstruct(state, language, extras);
                             initialConst = construct.pos;
