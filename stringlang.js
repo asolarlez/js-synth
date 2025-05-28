@@ -249,9 +249,9 @@ const problems = {
 
 function runOne(p, verbose) {
     let problem = problems[p];
-    console.log("Problem ", p);
+    if (verbose) { console.log("Problem ", p); }
     let sol = synthesize(problem.intypes, problem.io, strlanguage, stringScore, 0.001, problem.depth, 40000);
-    console.log(p, " Solution ", sol.print());;
+    console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
             console.log("Input: ", problems[p].io[i].in.x);

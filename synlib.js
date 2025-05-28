@@ -5,6 +5,10 @@
 
     function log(level, msg1, msg2, msg3, msg4) {
         if (level <= verbosity) {
+            if (typeof (msg1) == 'function') { msg1 = msg1(); }
+            if (typeof (msg2) == 'function') { msg2 = msg2(); }
+            if (typeof (msg3) == 'function') { msg3 = msg3(); }
+            if (typeof (msg4) == 'function') { msg4 = msg4(); }
             console.log(msg1, msg2, msg3, msg4);
         }
     }
@@ -73,22 +77,24 @@
     class TypeVar extends Type {
         constructor(name, id) {
             super();
-            this.name = name;
+            if (name in greeks) {
+                this.name = greeks[name];
+            } else {
+                this.name = name;
+            }
+            
+
             if (id != undefined) {
                 this.id = id;
+                this.namewid = this.name + "." + this.id;
             }
         }
-        toString() {
-            let rv;
-            if (this.name in greeks) {
-                rv= greeks[this.name];
-            } else {
-                rv= this.name;
-            }
+        toString() {                       
             if ('id' in this) {
-                rv += "."+ this.id;
-            }
-            return rv;
+                return this.namewid;
+            } else {
+                return this.name;
+            }            
         }
         addId(id) {
             if ('id' in this) {
@@ -673,9 +679,13 @@
         constructor(kind) {
             this.kind = kind;
             this.id = INSTID++;
+            this.depth = 0;
         }
         traverse(enter, reenter, end) {
 
+        }
+        setDepth() {
+            this.depth = 0;
         }
         setState(state) {
             this.state = state;
@@ -720,10 +730,17 @@
             this.name = name;
             this.imp = imp;
             this.absfun = abstract;
-            this.args = args;
+            this.args = args;            
         }
         isParametric() {
             return false;
+        }
+        setDepth() {
+            let dd = 0;
+            for (let i = 0; i < this.args.length; ++i) {
+                dd = Math.max(this.args[i].depth + 1, dd);
+            }
+            this.depth = dd;
         }
         print() {
             let rv = this.name + "(";
@@ -833,6 +850,9 @@
             super("int")
             this.val = val;
         }
+        setDepth() {           
+            this.depth = 0;
+        }
         print() {
             return "" + this.val;
         }
@@ -861,6 +881,9 @@
         }
         print() {
             return "(λ" + this.body.print() + ")";
+        }
+        setDepth() {            
+            this.depth = this.body.depth + 1;
         }
         /**
          * The eval for lambda should behave as a built in function, which means if its not a 
@@ -932,6 +955,9 @@
         print() {
             return this.name;
         }
+        setDepth() {            
+            this.depth = 0;
+        }
         eval(level, inputs, envt) {
             return inputs[this.name];
         }
@@ -988,6 +1014,9 @@
             if (type) {
                 this.type = type;
             }
+        }
+        setDepth() {
+            this.depth = 0;
         }
         print() {
             return "□";
@@ -1050,8 +1079,11 @@
     class StatsTracker {
         constructor() {
             this.tracker = {};
+            this.policyCache = {};
         }
-
+        resetPolicyCache() {
+            this.policyCache = {};
+        }
         nextConstruct(construct, initial, state, language, extras) {
             let totalLen = language.length + (extras ? extras.length : 0);
             let idx = (construct.pos + 1) % totalLen;
@@ -1064,11 +1096,9 @@
         }
 
         randomConstruct(state, language, extras) {
-            let tstate;
+            
             let key = stateToStr(state);
-            if (key in this.tracker) {
-                tstate = this.tracker[key];
-            }
+            
             function uniform() {
                 let el = 0;
                 if (extras) {
@@ -1077,36 +1107,69 @@
                 let idx = Math.floor(Math.random() * (language.length + el));
                 return idx >= language.length ? extras[idx - language.length] : language[idx];
             }
-            if (tstate && tstate.visits > 40) {
-                let rnd = Math.random();
 
-                let scores = this.succScores(state, language, extras);
-                let total = scores[1];
+            
+            let total;
+            let scores;
+            if (key in this.policyCache) {
+                let tmp = this.policyCache[key];
+                total = tmp.total;
+                scores = tmp.scores;
+                let el = 0;
+                if (extras && extras.length > 0) {
+                    el = extras.length;
+                    if (scores.length < language.length + el) {
+                        scores = this.succScores(state, language, extras);
+                        total = scores[1];
+                        if (total == 0) {
+                            return uniform();
+                        }
+                        scores = scores[0];
+                        this.policyCache[key] = { scores: scores, total: total };
+                    }                        
+                }
+                if (scores.length > language.length + el) {
+                    for (let i = language.length + el; i < scores.length; ++i) {
+                        total -= scores[i];
+                    }
+                }
+            } else {
+                let tstate;
+                if (key in this.tracker) {
+                    tstate = this.tracker[key];
+                }
+                if (!(tstate && tstate.visits > 40)) {
+                    return uniform();
+                }
+                scores = this.succScores(state, language, extras);
+                total = scores[1];
                 if (total == 0) {
                     return uniform();
                 }
                 scores = scores[0];
-                let tally = 0;
-                let i = 0;
-                for (i = 0; i < language.length; ++i) {
-                    tally += scores[i];
-                    if (tally / total > rnd) {
-                        return language[i];
-                    }
-                }
-                if (extras) {
-                    for (let j = 0; j < extras.length; ++j) {
-                        tally += scores[i];
-                        ++i;
-                        if (tally / total > rnd) {
-                            return extras[j];
-                        }
-                    }
-                }
-                console.log("WTF!!!!");
-            } else {
-                return uniform();
+                this.policyCache[key] = { scores: scores, total: total };
             }
+
+            let rnd = Math.random();
+            let tally = 0;
+            let i = 0;
+            for (i = 0; i < language.length; ++i) {
+                tally += scores[i];
+                if (tally / total > rnd) {
+                    return language[i];
+                }
+            }
+            if (extras) {
+                for (let j = 0; j < extras.length; ++j) {
+                    tally += scores[i];
+                    ++i;
+                    if (tally / total > rnd) {
+                        return extras[j];
+                    }
+                }
+            }
+            console.log("WTF!!!!");
+            
         }
 
         succScores(state, language, extras) {
@@ -1155,17 +1218,11 @@
             let action = getLabel(node);
             if (key in this.tracker) {
                 let tr = this.tracker[key];
-                tr.visits++;
-                if (action in tr.actions) {
-                    tr.actions[action]++;
-                } else {
-                    tr.actions[action] = 1;
-                }
+                tr.visits++;                
             } else {
                 let tr = {
-                    visits: 1, reward: 0, scores: 0, actions: {}
-                }
-                tr.actions[action] = 1;
+                    visits: 1, reward: 0, scores: 0
+                }                
                 this.tracker[key] = tr;
             }
         }
@@ -1191,7 +1248,7 @@
                     q.scores++;
                 } else {
                     let tr = {
-                        visits: 1, reward: score, scores: 1, actions: {}
+                        visits: 1, reward: score, scores: 1
                     };
                     tracker[key] = tr;
                 }
@@ -1216,7 +1273,7 @@
                     q.scores++;
                 } else {
                     let tr = {
-                        visits: 1, reward: score, scores: 1, actions: {}
+                        visits: 1, reward: score, scores: 1
                     };
                     tracker[key] = tr;
                 }
@@ -1563,6 +1620,7 @@
                         args.push(arg);
                     }
                     //console.log("Returning fun", bound);
+                    rv.actualReturntype = tc.convert(construct.returntype, rv.id);
                     return rv;
                 }
                 if (construct.kind == "int") {
@@ -1660,7 +1718,11 @@
                 } else {
 
                     out.type = expectedType;
-                    out.typeConvert(tc);                    
+                    if (!out.type && out.actualReturntype) {
+                        out.type = out.actualReturntype;
+                    }
+                    out.typeConvert(tc);      
+                    out.setDepth();
                     return out;
                 }
             }
@@ -1829,7 +1891,7 @@
             function mass(score) {
                 return Math.exp(-3 * score);
             }
-            for (let i = 0; i < beamsize; ++i) {
+            for (let i = 0; i < beamsize; ++i) {               
                 tc.reset();
                 let newprog = randomProgram(language, bound);
                 out = runOrLocalize(examples, newprog, bound);
@@ -1844,7 +1906,12 @@
             }
             budget -= beamsize;
             workList.sort((a, b) => a.score - b.score);
-            while (budget > 0) {                
+            let lastCacheReset = budget;
+            while (budget > 0) {     
+                if (lastCacheReset - budget > 500) {
+                    st.resetPolicyCache();
+                    lastCacheReset = budget;
+                }
                 let candidates = [];
                 for (let idx in workList) {
                     let c = workList[idx];
@@ -1945,13 +2012,17 @@
                     }
                 }
             }
-
+            let lastCacheReset = budget;
             while (budget > 0) {
+                if (lastCacheReset - budget > 100) {
+                    st.resetPolicyCache();
+                    lastCacheReset = budget;
+                }
                 tc.reset();
                 --budget;
                 let idx = Math.floor(Math.random() * beamsize);
                 let prog = workList[idx].prog;
-                log(3, "original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
+                log(3, ()=>"original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
                 const probReplace = 0.5;
                 if (Math.random() < probReplace) {
                     let adjusted = randomProgram(language, bound);
@@ -1962,10 +2033,10 @@
                     out = runOrLocalize(examples, adjusted, bound);
                     score = scoreOutputs(examples, out);
                     st.scoreTree(adjusted, (1 - score) * 100);
-                    log(3, "After mod ", adjusted.print(), "score", score);
+                    log(3, "After mod ", ()=>adjusted.print(), "score", score);
                     //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
                     //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
-                    if (score < 1 && (score <= workList[beamsize - 1].score  || Math.random() < 0.1  )) {
+                    if (score < 1 && (score <= workList[beamsize - 1].score)) { //  || Math.random() < 0.1 
                         replaceWorst(adjusted, score);                                                
                     }
                 } else {
@@ -1978,7 +2049,7 @@
                     out = runOrLocalize(examples, adjusted, bound);
                     score = scoreOutputs(examples, out);
                     st.scoreTree(adjusted, (1 - score) * 100);
-                    log(3, "After mod ", adjusted.print(), "score", score);
+                    log(3, "After mod ", ()=>adjusted.print(), "score", score);
                     if (score < workList[idx].score) {// good. The new program is better than the old one. replace
                         workList[idx] = { prog: adjusted, score: score };
                     } else if (score < workList[beamsize - 1].score) {
@@ -2032,7 +2103,7 @@
                 } else {
                     let score = scoreOutputs(examples, out)
                     st.scoreTree(prog, (1 - score) * 100);
-                    log(1, budget + " Score:", score, prog.print());
+                    log(1, budget + " Score:", score, ()=>prog.print());
                     if (score < threshold) {
                         //All outputs correct enough, we are done!
                         //return an object with the program, the status, the score, and the budget. 
@@ -2044,7 +2115,7 @@
                             bestScore = score;
                             bestSolution = prog;
                             bestOutput = out;
-                            log(1, "New best solution", score, bestSolution.print());
+                            log(1, "New best solution", score, ()=>bestSolution.print());
                         }
                         tc.reset();
                         prog = randomProgram(language, bound); //randomizeClone(language, prog, bound);
@@ -2077,9 +2148,9 @@
                     st.scoreTree(prog, -100);
                     //In this case, an error was localized to an AST node.
                     //Always re-randomize the AST node with the error.                
-                    log(1, budget + " Bad candidate          ", prog.print());
+                    log(1, budget + " Bad candidate          ", ()=>prog.print());
                     randomizeLocalizedError(language, prog, out, bound);//in-place mutation of prog.
-                    log(2, budget + " Rerandomized candidate:", prog.print());
+                    log(2, budget + " Rerandomized candidate:", ()=>prog.print());
                     //Could it ever modify bestProg? no, because bestProg works, and this only runs if prog doesn't work.
                     --budget;
                     out = runOrLocalize(examples, prog, bound);
@@ -2087,7 +2158,7 @@
                 } else {
                     let score = scoreOutputs(examples, out)
                     st.scoreTree(prog, (1 - score) * 100);
-                    log(1, budget + " Score:", score, prog.print());
+                    log(1, budget + " Score:", score, ()=>prog.print());
                     if (score < threshold) {
                         //All outputs correct enough, we are done!
                         //return an object with the program, the status, the score, and the budget. 
@@ -2102,9 +2173,9 @@
                             bestOutput = out;
                             log(1, "New best solution", score, bestSolution.print());
                         }
-                        log(2, "Before randomization", prog.print());
+                        log(2, "Before randomization", ()=>prog.print());
                         let newprog = randomizeClone(language, prog, bound);
-                        log(2, "After randomization", newprog.print());
+                        log(2, "After randomization", ()=>newprog.print());
                         --budget;
                         out = runOrLocalize(examples, newprog, bound);
                         if (isBadResult(out)) {
@@ -2116,7 +2187,7 @@
                             st.scoreTree(newprog, (1 - newscore) * 100);
                             if (newscore <= score) {
                                 //At least we made an improvement; make prog = newprog and keep improving.
-                                log(2, "New candidate", score, newprog.print());
+                                log(2, "New candidate", score, ()=>newprog.print());
                                 prog = newprog;
                             } else {
                                 prog = bestSolution; //could bestSolution be undefined? No.  
@@ -2129,6 +2200,9 @@
             return { prog: bestSolution, status: "INCORRECT", score: bestScore, budget: 0, crashing: crashing, print:solprint };            
         }
 
+
+        let randomizeClone;
+
         /**
          * Recursively traverse the AST of prog and with some probability replace a node with a new random node.
          * @param {any} language
@@ -2136,7 +2210,8 @@
          * @param {any} bound
          * @returns
          */
-        function randomizeClone(language, prog, bound) {
+        function simpleRandClone(language, prog, bound) {
+            //The problem with this function is that it prioritizes mutations to early arguments. 
             let probBound = Math.pow(1.5, -bound);
             cc.reset();
             function traverse(node, lbound, envt, expectedType) {
@@ -2169,6 +2244,7 @@
                                 rv.childstate = st.transition(node.state, rv, 0);
                             }
                             rv.type = expectedType;
+                            rv.setDepth();
                             return rv.setState(node.state);
 
                         } else {
@@ -2185,6 +2261,7 @@
                         if (newbody != node.body) {
                             let rv = (new LambdaN(newbody)).setState(node.state);
                             rv.type = expectedType;
+                            rv.setDepth();
                             return rv;
                         } else {
                             return node;
@@ -2210,6 +2287,97 @@
             }
             return rv;
         }
+
+
+        function fancyRandClone(language, prog, bound) {
+            //like simple clone, but doesn't prioritize early arguments.
+            let probBound = Math.pow(1.5, -bound);
+            cc.reset();
+            function traverse(node, lbound, envt, expectedType) {
+                if (Math.random() > probBound) {
+                    cc.advance(node);
+                    if (node instanceof FunN) {
+                        let changed = false;
+                        let choice = Math.floor(Math.random() * node.args.length);
+                        let newargs = node.args.map((arg, idx) => {
+                            if (idx === choice) {
+                                let rv = traverse(arg, lbound - 1, envt, arg.type);
+                                cc.goback(node);
+                                if (rv != arg) {
+                                    changed = true;
+                                }
+                                return rv;                                
+                            } else {
+                                cc.advance(arg);
+                                cc.goback(node);
+                                return arg;
+                            }
+                        });
+                        if (changed) {
+                            let rv;
+                            if (node.isParametric()) {
+                                rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
+                            } else {
+                                rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                            }
+                            if (newargs.length == 0) {
+                                rv.childstate = st.transition(node.state, rv, 0);
+                            }
+                            rv.type = expectedType;
+                            rv.setDepth();
+                            return rv.setState(node.state);
+
+                        } else {
+                            //If the argument didn't change, I am going to give it a chance to rewrite this node.
+                            let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
+                            if (rv instanceof Error) {
+                                cc.advance(node);
+                                return node;
+                            }
+                            if (rv.equals(node)) {
+                                return node;
+                            }
+                            return rv;
+                        }
+                    }
+                    if (node instanceof LambdaN) {
+                        let idx = envt.length;
+                        let newenvt = envt.map((dbi, i) => new deBroujin(idx - i, dbi.type, dbi.pos));
+                        let argtype = node.type ? node.type.from : undefined;
+                        newenvt.push(new deBroujin(0, argtype, language.length + envt.length));
+                        let newbody = traverse(node.body, lbound - 1, newenvt, node.body.type);
+                        cc.goback(node);
+                        if (newbody != node.body) {
+                            let rv = (new LambdaN(newbody)).setState(node.state);
+                            rv.type = expectedType;
+                            rv.setDepth();
+                            return rv;
+                        } else {
+                            return node;
+                        }
+                    }
+                    return node;
+                } else {
+                    let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
+                    if (rv instanceof Error) {
+                        cc.advance(node);
+                        return node;
+                    }
+                    if (rv.equals(node)) {
+                        return node;
+                    }
+                    return rv;
+                }
+            }
+            let rv = traverse(prog, bound, []);
+            while (rv == prog) {
+                probBound = probBound * 1.5;
+                rv = traverse(prog, bound, []);
+            }
+            return rv;
+        }
+
+
 
 
         function processLanguage(language, inputspec) {
@@ -2246,8 +2414,9 @@
         let rp = randomProgram(langWithInputs, bound);     
 
 
+        randomizeClone = fancyRandClone; // simpleRandClone
 
-        let synthesizer = smcSynth; // randomAndHillClimb; // randomRandom;
+        let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;
 
         let rv = synthesizer(langWithInputs, examples, rp, bound, N);
 

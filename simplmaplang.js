@@ -312,9 +312,9 @@ let problems = {
 
 function runOne(p, verbose) {
     let problem = problems[p];
-    console.log("Problem ", p);
+    if (verbose) { console.log("Problem ", p); }
     let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 10000);
-    console.log(p, " Solution ", sol.print());;
+    console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
             console.log("Input: ", problems[p].io[i].in.x);
@@ -327,7 +327,7 @@ function runOne(p, verbose) {
 
 
 function r2r(verbose) {
-    runOne("2dreduce", verbose);
+    runOne("reducebasic", verbose);
 }
 
 
