@@ -327,7 +327,7 @@ function runOne(p, verbose) {
 
 
 function r2r(verbose) {
-    runOne("reducebasic", verbose);
+    runOne("2dreduce", verbose);
 }
 
 

@@ -2023,6 +2023,8 @@
             let beamsize = 10;
             let out = runOrLocalize(examples, prog, bound);
             const initBudget = budget;
+            let rejuvenate = 0;
+
 
             if (isBadResult(out)) {
                 console.log(prog.print());
@@ -2058,6 +2060,19 @@
                     }
                 }
             }
+            function testProg(prog) {
+
+               let out = runOrLocalize(examples, prog, bound);
+                if (isBadResult(out)) {
+                    console.log(prog.print());
+                    throw "Should never happen";
+                }
+                let score = scoreOutputs(examples, out);
+                st.scoreTree(prog, (1 - score) * 100);
+                return score;
+            }
+
+            let rejubudget = 300;
             let lastCacheReset = budget;
             while (budget > 0) {
                 if (lastCacheReset - budget > 100) {
@@ -2076,9 +2091,8 @@
                         console.log("randomAndHillClimb1 FAILED")
                         return;
                     }
-                    out = runOrLocalize(examples, adjusted, bound);
-                    score = scoreOutputs(examples, out);
-                    st.scoreTree(adjusted, (1 - score) * 100);
+                    score = testProg(adjusted);
+                    
                     log(3, "After mod ", ()=>adjusted.print(), "score", score);
                     //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
                     //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
@@ -2092,9 +2106,7 @@
                         console.log("randomAndHillClimb1 FAILED")
                         return;
                     }
-                    out = runOrLocalize(examples, adjusted, bound);
-                    score = scoreOutputs(examples, out);
-                    st.scoreTree(adjusted, (1 - score) * 100);
+                    score = testProg(adjusted);                    
                     log(3, "After mod ", ()=>adjusted.print(), "score", score);
                     if (score < workList[idx].score) {// good. The new program is better than the old one. replace
                         workList[idx] = { prog: adjusted, score: score };
@@ -2106,18 +2118,30 @@
 
 
 
-                if (idx < beamsize / 2) { // testing one of the good ones                    
-                   
-                } else {
-                    // testing one of the bad ones
-                    
-                }   
-                workList.sort((a, b) => a.score - b.score); 
+               
+                workList.sort((a, b) => a.score - b.score);                 
                 if (workList[0].score < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
                     //it also has a print function that returns a string representation of the object.
                     return { prog: workList[0].prog, status: "CORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+                }
+                if (budget == rejuvenate) {
+                    for (let i = beamsize / 2; i < beamsize; ++i) {
+                        let adjusted = randomProgram(language, bound);
+                        if (adjusted instanceof Error) {
+                            console.log("randomAndHillClimb1 FAILED")
+                            return;
+                        }
+                        score = testProg(adjusted);
+                        workList[i] = { prog: adjusted, score: score };
+                    }
+                    workList.sort((a, b) => a.score - b.score);   
+                    rejuvenate = 0;
+                    rejubudget = rejubudget * 1.5;
+                }
+                if (workList[0].score< 1 && workList[0].score == workList[beamsize - 1].score && rejuvenate < 1) {
+                    rejuvenate = budget - rejubudget;
                 }
             }
             return { prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };

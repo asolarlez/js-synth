@@ -30,6 +30,14 @@ function runExperiments() {
             let fracCorrect = corrects / values.length;
             console.log(`${name}: avgCost = ${avgCost}, fracCorrect = ${fracCorrect}`);
         }
+
+        console.log("experiment = {");
+        for (let name in aggregated) {
+            let values = aggregated[name];   
+            let sorted = values.map((a) => a.cost).sort((a, b) => a - b);
+            console.log(`  "${name}": [${sorted}],`);
+        }
+        console.log("};")
     }
     printAggregateStats(aggregated);
 }
