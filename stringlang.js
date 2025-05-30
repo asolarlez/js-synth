@@ -212,6 +212,46 @@ function stringScore(examples, outputs) {
     return output / outputs.length;
 }
 
+
+function lcsScore(example, output) {
+    if (typeof (output) != "string") {
+        return 1;
+    }
+    let table = [];
+    for (let i = 0; i <= example.length; ++i) {
+        table.push({});
+    }
+    function lcs(i, j) {
+        if(i==example.length || j == output.length) {return 0;}
+        if (j in table[i]) { return table[i][j]; }
+        if (example[i] == output[j]) {
+            let rv = lcs(i + 1, j + 1);
+            table[i][j] = 1 + rv;
+            return 1 + rv;
+        } else {
+            if (Math.abs(i - j) > 5) {
+                return 0;
+            }
+            let rv1 = lcs(i + 1, j);
+            let rv2 = lcs(i, j + 1);
+            let rv = Math.max(rv1, rv2);
+            table[i][j] = rv;
+            return rv;
+        }
+    }
+    let rv = lcs(0, 0);
+    return 1 - (rv / Math.max(example.length, output.length));
+}
+
+function fancyStringScore(examples, outputs) {    
+    let output = 0;
+    for (let idx in outputs) {
+        output += lcsScore(examples[idx].out, outputs[idx]);
+    }
+    return output / outputs.length;
+}
+
+
 const problems = {
 
     "parenthesis": {
@@ -250,7 +290,7 @@ const problems = {
 function runOne(p, verbose) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
-    let sol = synthesize(problem.intypes, problem.io, strlanguage, stringScore, 0.001, problem.depth, 50000);
+    let sol = synthesize(problem.intypes, problem.io, strlanguage, fancyStringScore, 0.001, problem.depth, 50000);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {

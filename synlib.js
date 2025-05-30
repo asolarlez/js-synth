@@ -846,9 +846,10 @@
 
 
     class IntN extends AST {
-        constructor(val) {
+        constructor(val, range) {
             super("int")
             this.val = val;
+            this.range = range;
         }
         setDepth() {           
             this.depth = 0;
@@ -1670,7 +1671,7 @@
                 }
                 if (construct.kind == "int") {
                     let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
-                    let rv = new IntN(randval);                                        
+                    let rv = new IntN(randval, construct.range);                                        
                     oldState = cc.advance(rv, localenv);
                     rv.state = state;
                     rv.childstate = st.transition(state, rv, 0);
@@ -1954,7 +1955,7 @@
             workList.sort((a, b) => a.score - b.score);
             let lastCacheReset = budget;
             while (budget > 0) {     
-                if (lastCacheReset - budget > 500) {
+                if (lastCacheReset - budget > 100) {
                     st.resetPolicyCache();
                     lastCacheReset = budget;
                 }
@@ -1971,7 +1972,13 @@
                 totalScore = 0;
                 workList = candidates.map((entry) => {
                     tc.reset();
-                    let adjusted = randomizeClone(language, entry.prog, bound);
+                    let adjusted; 
+                    if (Math.random() > 0.1) {
+                        adjusted = randomizeClone(language, entry.prog, bound);
+                    } else {
+                        adjusted = entry.prog;
+                    }
+                    
                     if (adjusted instanceof Error) {
                         console.log("randomAndHillClimb1 FAILED")
                         return adjusted;
@@ -2081,9 +2088,7 @@
                 }
                 tc.reset();
                 --budget;
-                let idx = Math.floor(Math.random() * beamsize);
-                let prog = workList[idx].prog;
-                log(3, ()=>"original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
+                
                 const probReplace = 0.5;
                 if (Math.random() < probReplace) {
                     let adjusted = randomProgram(language, bound);
@@ -2101,6 +2106,10 @@
                     }
                 } else {
                     //We don't replace, we improve.
+                    let idx = Math.floor(Math.random() * beamsize);
+                    let prog = workList[idx].prog;
+                    log(3, () => "original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
+
                     let adjusted = randomizeClone(language, workList[idx].prog, bound);
                     if (adjusted instanceof Error) {
                         console.log("randomAndHillClimb1 FAILED")
@@ -2117,9 +2126,11 @@
                 }
 
 
-
+                function quant(ent) {
+                    return ent.score * 100 + ent.prog.depth;
+                }
                
-                workList.sort((a, b) => a.score - b.score);                 
+                workList.sort((a, b) => quant(a) - quant(b));                 
                 if (workList[0].score < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
@@ -2136,7 +2147,7 @@
                         score = testProg(adjusted);
                         workList[i] = { prog: adjusted, score: score };
                     }
-                    workList.sort((a, b) => a.score - b.score);   
+                    workList.sort((a, b) => quant(a) - quant(b));   
                     rejuvenate = 0;
                     rejubudget = rejubudget * 1.5;
                 }
@@ -2426,6 +2437,19 @@
                             return node;
                         }
                     }
+                    if (node instanceof IntN) {
+                        let randval = Math.floor(Math.random() * (node.range[1] - node.range[0] + 1) + node.range[0]);
+                        while (randval == node.val) {
+                            randval = Math.floor(Math.random() * (node.range[1] - node.range[0] + 1) + node.range[0]);
+                        }
+                        let rv = new IntN(randval, node.range);
+                        rv.type = expectedType;
+                        rv.setDepth();
+                        rv.setState(node.state);
+                        rv.childstate = node.childstate;
+                        return rv;
+                    }
+
                     return node;
                 } else {
                     let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
@@ -2486,7 +2510,7 @@
 
         randomizeClone = fancyRandClone; // simpleRandClone
 
-        let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;
+        let synthesizer = smcSynth;  // randomRandom; randomAndHillClimb; //
 
         let rv = synthesizer(langWithInputs, examples, rp, bound, N);
 
