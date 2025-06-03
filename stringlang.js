@@ -290,7 +290,7 @@ const problems = {
 function runOne(p, verbose) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
-    let sol = synthesize(problem.intypes, problem.io, strlanguage, fancyStringScore, 0.001, problem.depth, 50000);
+    let sol = synthesize(problem.intypes, problem.io, strlanguage, fancyStringScore, 0.001, problem.depth, 70000);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {

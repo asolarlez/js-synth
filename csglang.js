@@ -62,10 +62,10 @@ function shapeEval(pt, shape) {
         if (pt.x == sh.x && pt.y == sh.y + sh.h) { return "LLcorner"; }
         if (pt.x == sh.x + sh.w && pt.y == sh.y + sh.h) { return "LRcorner"; }
 
-        if (pt.x == sh.x && pt.y > sh.y && pt.y < sh.y + sh.h) { return "Leftedge"; }
-        if (pt.x == sh.x + sh.w && pt.y > sh.y && pt.y < sh.y + sh.h) { return "Rightedge"; }
-        if (pt.y == sh.y && pt.x > sh.x && pt.x < sh.x + sh.w) { return "Upedge"; }
-        if (pt.y == sh.y + sh.h && pt.x > sh.x && pt.x < sh.x + sh.w) { return "Downedge"; }
+        if (pt.x == sh.x && pt.y > sh.y && pt.y < sh.y + sh.h) { return "Vedge"; }
+        if (pt.x == sh.x + sh.w && pt.y > sh.y && pt.y < sh.y + sh.h) { return "Vedge"; }
+        if (pt.y == sh.y && pt.x > sh.x && pt.x < sh.x + sh.w) { return "Hedge"; }
+        if (pt.y == sh.y + sh.h && pt.x > sh.x && pt.x < sh.x + sh.w) { return "Hedge"; }
         if (pt.x > sh.x && pt.x < sh.x + sh.w && pt.y > sh.y && pt.y < sh.y + sh.h) { return "inner"; }
         return "none";
     } else if (sh.kind === 'union') {
@@ -101,7 +101,7 @@ function shapeEval(pt, shape) {
 }
 
 
-let strlanguage = [
+let csglanguage = [
     {
         name: "circle",
         kind: "fun",
@@ -159,7 +159,7 @@ let strlanguage = [
         type: Tp("pt->shape->feature"),
         nargs: 2,
         imp: shapeEval,
-    }
+    },
 
     {
         name: "N",
@@ -170,6 +170,118 @@ let strlanguage = [
 ];
 
 
+
+let l = {
+    circle: function (x, y, r) { return csglanguage[0].imp(x, y, r) }
+    , rect: function (x, y, w, h) { return csglanguage[1].imp(x, y, w, h) }
+    , union: function (sh1, sh2) { return csglanguage[2].imp(sh1, sh2) }
+    , dif: function (sh1, sh2) { return csglanguage[3].imp(sh1, sh2) }
+    , loop: function (sh, dx, dy, n) { return csglanguage[4].imp(sh, dx, dy, n) }
+    , eval: function (pt, shape) { return csglanguage[5].imp(pt, shape) }
+    , N: function (n) {
+        return n;
+    }
+}
+
+
+
+const problems = {
+
+    "circleRect": {
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        prog: l.union(l.circle(3, 3, 1), l.rect(3, 2, 3, 2)),
+        io: [{ in: { x: {x:2, y:3} } },
+            { in: { x: { x: 3, y: 3 } } },
+            { in: { x: { x: 6, y: 3 } } },
+            { in: { x: { x: 6, y: 4 } } },
+            { in: { x: { x: 6, y: 2 } } },
+            { in: { x: { x: 4, y: 2 } } },
+            { in: { x: { x: 2, y: 2 } } }],
+        depth: 3
+    },
+
+    "circleLoop": {
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        prog: l.loop(l.circle(3, 3, 1), 1, 0, 4),
+        io: [{ in: { x: { x: 1, y: 2 } } },
+            { in: { x: { x: 2, y: 3 } } },
+        { in: { x: { x: 3, y: 2 } } },
+        { in: { x: { x: 4, y: 2 } } },
+        { in: { x: { x: 5, y: 2 } } },
+        { in: { x: { x: 7, y: 3 } } },
+        { in: { x: { x: 7, y: 4 } } },
+        { in: { x: { x: 5, y: 4 } } }],
+        depth: 3
+    },
+    "loopDif": {
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        prog: l.dif(l.loop(l.circle(3, 3, 1), 1, 0, 4),
+            l.rect(3, 3, 3, 2)),
+        io: [
+            { in: { x: { x: 1, y: 2 } } },
+            { in: { x: { x: 2, y: 3 } } },
+        { in: { x: { x: 3, y: 3 } } },
+        { in: { x: { x: 4, y: 2 } } },
+        { in: { x: { x: 5, y: 2 } } },
+        { in: { x: { x: 7, y: 3 } } },
+        { in: { x: { x: 7, y: 4 } } },
+        { in: { x: { x: 5, y: 4 } } },
+        { in: { x: { x: 4, y: 3 } } }
+        ],
+        depth: 4
+    }
+
+
+}
+
+
+function runOne(p, verbose) {
+    let problem = problems[p];
+    if (verbose) { console.log("Problem ", p); }
+    for (let idx in problem.io) {
+        let inpt = problem.io[idx].in.x;
+        let out = l.eval(inpt, problem.prog);
+        problem.io[idx].out = out;
+    }
+    let sol = synthesize(problem.intypes, problem.io, csglanguage, score, 0.001, problem.depth, 100000);
+    console.log(p, sol.print());;
+    if (verbose) {
+        for (let i = 0; i < problems[p].io.length; ++i) {
+            console.log("Input: ", problems[p].io[i].in.x);
+            console.log("Output:", sol.prog.eval(3, problems[p].io[i].in, []));
+            console.log("Target:", problems[p].io[i].out);
+        }
+    }
+    return sol;
+}
+
+
+
+
+function runAll(verbose) {
+    let sols = {};
+    for (let p in problems) {
+        let rv = runOne(p, verbose);
+        sols[p] = rv;
+    }
+    return sols;
+}
+
+function run() {
+    runOne("loopDif", true);
+}
+
+
+
+
+// Export for Node.js (CommonJS)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { language: csglanguage, run: run, runAll: runAll };
+}
+// Export for browsers (ES6 Modules)
+else if (typeof exports === 'undefined') {
+    window.csglang = { language: csglanguage, run: run };
+}
 
 
 

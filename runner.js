@@ -3,6 +3,7 @@
 // Import the synlib module
 var simplmaplang = require('./simplmaplang.js');
 var stringlang = require('./stringlang.js');
+var csglang = require('./csglang.js');
 
 function runExperiments() {
     let aggregated = {};
@@ -14,12 +15,13 @@ function runExperiments() {
             aggregated[name].push(result[name]);
         }        
     }
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 30; i++) {
         let simpRes = simplmaplang.runAll();
         let strlRes = stringlang.runAll();
+        let csgRes = csglang.runAll();
         addToAggregated(simpRes);
         addToAggregated(strlRes);
-
+        addToAggregated(csgRes);
     }
     function printAggregateStats(aggregated) {
         for (let name in aggregated) {

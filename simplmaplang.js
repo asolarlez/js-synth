@@ -313,7 +313,7 @@ let problems = {
 function runOne(p, verbose) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
-    let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 40000);
+    let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 60000);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
@@ -358,7 +358,7 @@ function run() {
     let examples = [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
         { in: { x: [7, 0, 0] }, out: 7 }];
-    let sol = synthesize([{ kind: "input", name: "x", type:Tp("list[int]") }], examples, maplanguage, score, 0.001, 5, 5000);
+    let sol = synthesize([{ kind: "input", name: "x", type:Tp("list[int]") }], examples, maplanguage, score, 0.001, 5, 10000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);

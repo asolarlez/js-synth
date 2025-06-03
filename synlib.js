@@ -1179,7 +1179,7 @@
             function rescale(score) {
                 //(tanh((x-50)/ 50) + 1) / 2
                 //(Math.tanh(score / 100) + 1) / 2;
-                return (Math.tanh((score - 50) / 50) + 1) / 2;
+                return (Math.tanh((score - 60) / 40) + 1) / 2;
             }
             let zeroR = rescale(0);
             for (let i = 0; i < language.length; ++i) {
@@ -1975,6 +1975,7 @@
                     let adjusted; 
                     if (Math.random() > 0.1) {
                         adjusted = randomizeClone(language, entry.prog, bound);
+                        --budget;
                     } else {
                         adjusted = entry.prog;
                     }
@@ -1994,7 +1995,7 @@
                     return { prog: adjusted, score: score };
                 });
                 
-                budget -= beamsize;
+                
                 if (bestScore < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
@@ -2089,7 +2090,7 @@
                 tc.reset();
                 --budget;
                 
-                const probReplace = 0.5;
+                const probReplace = 0.5; // Math.min(0.5, 1.5*workList[beamsize-1].score);
                 if (Math.random() < probReplace) {
                     let adjusted = randomProgram(language, bound);
                     if (adjusted instanceof Error) {
@@ -2120,6 +2121,9 @@
                     if (score < workList[idx].score) {// good. The new program is better than the old one. replace
                         workList[idx] = { prog: adjusted, score: score };
                     } else if (score < workList[beamsize - 1].score) {
+                        if (Math.random() < 0.05) {
+                         //   workList[beamsize - 1] = { prog: adjusted, score: score };
+                        }
                         //bad. The new program is worse than the old one, but better than the worst one in the list.
                         //workList[beamsize - 1] = { prog: adjusted, score: score };
                     } // otherwise just drop the adjusted one.
@@ -2510,7 +2514,7 @@
 
         randomizeClone = fancyRandClone; // simpleRandClone
 
-        let synthesizer = smcSynth;  // randomRandom; randomAndHillClimb; //
+        let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;  // //
 
         let rv = synthesizer(langWithInputs, examples, rp, bound, N);
 
