@@ -243,7 +243,7 @@ function runOne(p, verbose) {
         let out = l.eval(inpt, problem.prog);
         problem.io[idx].out = out;
     }
-    let sol = synthesize(problem.intypes, problem.io, csglanguage, score, 0.001, problem.depth, 100000);
+    let sol = synthesize(problem.intypes, problem.io, csglanguage, score, 0.001, problem.depth, 150000);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {

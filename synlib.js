@@ -1179,6 +1179,7 @@
             function rescale(score) {
                 //(tanh((x-50)/ 50) + 1) / 2
                 //(Math.tanh(score / 100) + 1) / 2;
+                //return (Math.tanh((score - 50) / 50) + 1) / 2;
                 return (Math.tanh((score - 60) / 40) + 1) / 2;
             }
             let zeroR = rescale(0);
