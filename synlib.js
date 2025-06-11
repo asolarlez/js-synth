@@ -27,7 +27,7 @@
         return rv;
     }
 
-    //Math.random = debugRandom;
+    // Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
@@ -42,6 +42,7 @@
         constructor(name) {
             super();
             this.name = name;
+            this.isFixed = true;
         }
         toString() {
             return this.name;
@@ -88,6 +89,7 @@
                 this.id = id;
                 this.namewid = this.name + "." + this.id;
             }
+            this.isFixed = false;
         }
         toString() {                       
             if ('id' in this) {
@@ -122,7 +124,18 @@
             }
             
         }
-
+        antiunify(other, state) {
+            if (other instanceof TypeVar && other.name == this.name) {
+                return this;
+            } else {
+                for (let x in greeks) {
+                    if (!greeks[x] in state) {
+                        state[greeks[x]] = true;
+                        return new TypeVar(greeks[x]);
+                    }
+                }
+            }
+        }
     }
 
     class Parametric extends Type {
@@ -130,6 +143,11 @@
             super();
             this.name = name;
             this.params = params;
+            let ifx = true;
+            for(let i=0; i<params.length; ++i){
+                ifx = ifx && params[i].isFixed;
+            }
+            this.isFixed = ifx; //parametric types are fixed if all their parameters are fixed.
         }
         toString() {
             let rv = this.name;
@@ -160,19 +178,28 @@
             }
         }
         replaceVar(f) {
-            let np = [];
-            let changed = false;
-            for (let i = 0; i < this.params.length; ++i) {
-                let p = this.params[i].replaceVar(f);
-                np.push(p);
-                if (p != this.params[i]) {
-                    changed = true;
+            if(this.params.length == 1) {
+                let p = this.params[0].replaceVar(f);
+                if (p != this.params[0]) {
+                    return new Parametric(this.name, [p]);
+                } else {
+                    return this;
                 }
-            }
-            if (changed) {
-                return new Parametric(this.name, np);
-            } else {
-                return this;
+            }else{                
+                let np = [];
+                let changed = false;
+                for (let i = 0; i < this.params.length; ++i) {
+                    let p = this.params[i].replaceVar(f);
+                    np.push(p);
+                    if (p != this.params[i]) {
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    return new Parametric(this.name, np);
+                } else {
+                    return this;
+                }
             }
         }
         compatible(t) {
@@ -215,6 +242,7 @@
             super();
             this.from = from;
             this.to = to;
+            this.isFixed = from.isFixed && to.isFixed; //function types are fixed if both their from and to types are fixed.
         }
         toString() {
             let rv = this.from.toString();
@@ -372,6 +400,7 @@
          * @returns
          */
         convert(type, id, limit) {
+            if(type.isFixed){ return type; } //If the type is fixed, we don't need to convert it.
             if (limit == undefined) { limit = 20; }
             if (limit <= 0) {
                 throw "Too much";
@@ -395,9 +424,7 @@
          * @returns
          */
         localConvert(type, limit) {
-            if (type instanceof Primitive) {
-                return type;
-            }
+            if(type.isFixed){ return type; }
             if (limit == undefined) { limit = 20; }
             if (limit <= 0) {
                 throw "Too much";
@@ -680,13 +707,18 @@
             this.kind = kind;
             this.id = INSTID++;
             this.depth = 0;
+            this.size = 1;
         }
         traverse(enter, reenter, end) {
-
+            if (enter) { enter(this); }
+            if (end) { end(this) }
         }
         setDepth() {
             this.depth = 0;
+            this.depth = 1;
+            return this;
         }
+        
         setState(state) {
             this.state = state;
             return this;
@@ -700,6 +732,7 @@
                 this.type = tc.convert(this.type, this.id);
             }
         }
+        accept(visitor) { }
     }
 
 
@@ -735,12 +768,17 @@
         isParametric() {
             return false;
         }
+        
         setDepth() {
             let dd = 0;
+            let size = 1;
             for (let i = 0; i < this.args.length; ++i) {
                 dd = Math.max(this.args[i].depth + 1, dd);
+                size += this.args[i].size;
             }
             this.depth = dd;
+            this.size = size;
+            return this;
         }
         print() {
             let rv = this.name + "(";
@@ -763,9 +801,13 @@
                 }
                 actuals.push(actual);
             }
+            actuals.push(inputs);            
             return this.imp.apply(this, actuals);
         }
 
+        accept(visitor) {
+            return visitor.visitFun(this);
+        }
         abstract(level, inputs, envt) {
             let actuals = [];
             for (let i in this.args) {
@@ -840,6 +882,9 @@
             rv += ")";
             return rv;
         }
+        accept(visitor) {
+            return visitor.visitFun(this);
+        }
     }
 
 
@@ -853,6 +898,8 @@
         }
         setDepth() {           
             this.depth = 0;
+            this.size = 1;
+            return this;
         }
         print() {
             return "" + this.val;
@@ -873,6 +920,9 @@
             }
             return this.val == other.val;
         }
+        accept(visitor) {
+            return visitor.visitInt(this);
+        }
     }
 
     class LambdaN extends AST {
@@ -885,6 +935,8 @@
         }
         setDepth() {            
             this.depth = this.body.depth + 1;
+            this.size = 1 + this.body.size;
+            return this;
         }
         /**
          * The eval for lambda should behave as a built in function, which means if its not a 
@@ -946,6 +998,9 @@
             super.typeConvert(tc);
             this.body.typeConvert(tc);            
         }
+        accept(visitor) {
+            return visitor.visitLambda(this);
+        }
     }
 
     class InputN extends AST {
@@ -958,6 +1013,8 @@
         }
         setDepth() {            
             this.depth = 0;
+            this.size = 1;
+            return this;
         }
         eval(level, inputs, envt) {
             return inputs[this.name];
@@ -974,6 +1031,9 @@
                 return false;
             }
             return this.name == other.name;
+        }
+        accept(visitor) {
+            return visitor.visitInput(this);
         }
     }
 
@@ -1007,6 +1067,9 @@
             }
             return this.idx == other.idx;
         }
+        accept(visitor) {
+            return visitor.visitIndex(this);
+        }
     }
 
     class Hole extends AST {
@@ -1015,9 +1078,12 @@
             if (type) {
                 this.type = type;
             }
+            this.size = 0;
         }
         setDepth() {
             this.depth = 0;
+            this.size = 0; // holes don't count for size purposes.
+            return this;
         }
         print() {
             return "□";
@@ -1032,6 +1098,9 @@
             if (enter) { enter(this); }
             if (end) { end(this) }
         }
+        accept(visitor) {
+            return visitor.visitHole(this);
+        }
         equals(other) {
             if (other.kind != "hole") {
                 return false;
@@ -1043,6 +1112,70 @@
             }
         }
     }
+
+    class ASTVisitor {
+        visitHole(hole) { return hole; }
+        visitFun(fun) {
+            let newargs = [];
+            let changed = false;
+            for (let i = 0; i < fun.args.length; ++i) {
+                let newarg = fun.args[i].accept(this);
+                if (newarg != fun.args[i]) {
+                    newargs.push(newarg);
+                    changed = true;
+                } else {
+                    newargs.push(fun.args[i]);
+                }
+            }
+            if (changed) {
+                let rv = new FunN(fun.name, fun.imp, fun.absfun, newargs).setState(fun.state).setDepth();
+                rv.type = fun.type;
+                rv.returntype = fun.returntype;
+                rv.typeargs = fun.typeargs;
+                return rv;
+            } else {
+                return fun;
+            }            
+        }
+        visitpFun(pfun) {
+            let newargs = [];
+            let changed = false;
+            for (let i = 0; i < pfun.args.length; ++i) {
+                let newarg = pfun.args[i].accept(this);
+                if (newarg != pfun.args[i]) {
+                    newargs.push(newarg);
+                    changed = true;
+                } else {
+                    newargs.push(pfun.args[i]);
+                }
+            }
+            if (changed) {
+                let rv = new pFunN(pfun.name, pfun.impP, pfun.abstractP, newargs, pfun.param).setState(pfun.state).setDepth();
+                rv.type = fun.type;
+                rv.returntype = fun.returntype;
+                rv.typeargs = fun.typeargs;
+                return rv;
+            } else {
+                return pfun;
+            }
+        }
+        visitInt(intn) { return intn; }
+        visitLambda(lambda) {
+            let newbody = lambda.body.accept(this);
+            if (newbody != lambda.body) {
+                let rv = new LambdaN(newbody).setState(lambda.state).setDepth();
+                rv.type = lambda.type;
+                return rv;
+            } else {
+                return lambda;
+            }
+        }
+        visitInput(input) { return input; }
+        visitIndex(index) {
+            return index;
+        }
+    }
+
 
     function isHole(val) {
         return val instanceof Hole;
@@ -1074,6 +1207,683 @@
 
     function nextStateToStr(state, node) {
         return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node) ;
+    }
+
+
+
+
+    function stitch(programs, language) {
+        class Plug extends AST {
+            constructor() {
+                super("plug");
+                this.depth = 0;
+                this.size = 0;
+            }
+            setDepth() {
+                this.depth = 0;
+                this.size = 0; // holes don't count for size purposes.
+                return this;
+            }
+            print() {
+                return "#";
+            }
+            accept(visitor) {
+                return visitor.visitPlug(this);
+            }
+        }
+        function growCandidate(candidate) {
+            let tmpPrograms = candidate.instances.slice(0);
+            //After calling thre grow visitor, the newInstancesIdx index maps each label to an outId that is an index inside newProgs returned 
+            // by the visitor, and a list of indices into the original tmpPrograms that match that grown component.
+            //
+            let newInstanceIdx = {};
+
+            /**
+             * This class will look for the first hole and replace it with either a plug or it will 
+             * grow the candidate with potential matches from the matched instances. It uses the variable tmpPrograms to 
+             * keep track of which node in the matching instances it is visiting. 
+             * 
+             * One caveat is that only holes matching nodes with dbidx of -1 can be converted to plugs. 
+             */
+            class grow extends ASTVisitor {
+                constructor() {
+                    super();
+                    this.lastParent = undefined;
+                }
+                visitFun(fun) {
+                    let local = tmpPrograms.slice(0);
+                    let newargs = [];
+                    let changed = false;
+                    for (let i = 0; i < fun.args.length; ++i) {
+                        this.lastParent = fun;
+                        for (let q in tmpPrograms) {
+                            tmpPrograms[q] = tmpPrograms[q].args[i];
+                        }
+                        let newarg;
+                        if (changed) {
+                            newarg = [fun.args[i]];
+                        } else {
+                            newarg = fun.args[i].accept(this);
+                        }                        
+                        if (newargs.length == 0) {
+                            for (let j = 0; j < newarg.length; ++j) {
+                                if (newarg[j] != fun.args[i]) { changed = true; }
+                                newargs.push([newarg[j]]);
+                            }
+                        } else {
+                            let tmp = [];
+                            for (let j = 0; j < newarg.length; ++j) {
+                                if (newarg[j] != fun.args[i]) { changed = true; }
+                                for (let t = 0; t < newargs.length; ++t) {
+                                    tmp.push(newargs[t].concat([newarg[j]]));
+                                }
+                            }
+                            newargs = tmp;
+                        }
+                        tmpPrograms = local.slice(0);
+                    }
+                    
+                    if (changed) {                        
+                        return newargs.map((pfunargs) => new FunN(fun.name, fun.impP, fun.abstractP, pfunargs).setDepth());
+                    } else {
+                        return [fun];
+                    }
+                }
+                visitpFun(pfun) {
+                    let local = tmpPrograms.slice(0);
+                    let newargs = [];
+                    let changed = false;
+                    for (let i = 0; i < pfun.args.length; ++i) {
+                        this.lastParent = pfun;
+                        for (let q in tmpPrograms) {
+                            tmpPrograms[q] = tmpPrograms[q].args[i];
+                        }
+                        let newarg;
+                        if (changed) {
+                            newarg = [fun.args[i]];
+                        } else {
+                            newarg = fun.args[i].accept(this);
+                        } 
+                        if (newargs.length == 0) {
+                            for (let j = 0; j < newarg.length; ++j) {
+                                if (newarg[j] != pfun.args[i]) { changed = true; }
+                                newargs.push([newarg[j]]);
+                            }
+                        } else {
+                            let tmp = [];                            
+                            for (let j = 0; j < newarg.length; ++j) {
+                                if (newarg[j] != pfun.args[i]) { changed = true; }
+                                for (let t = 0; t < newargs.length; ++t) {                                    
+                                    tmp.push(newargs[t].concat([newarg[j]]));                                    
+                                }
+                            }
+                        }                       
+                        tmpPrograms = local;
+                    }
+                    
+                    if (changed) {
+                        return newargs.map((pfunargs) => new pFunN(pfun.name, pfun.impP, pfun.abstractP, pfunargs, pfun.param).setDepth())                       ;
+                    } else {
+                        return [pfun];
+                    }
+                }
+                visitPlug(plug) {
+                    return [plug];
+                }
+                visitHole(hole) {
+                    //We have reached a hole. This is the only hole we will reach in this pass.
+                    // tmpPrograms has a list of current nodes in each instance of the original candidate. We need to group them into distinct indexes.                     
+                    let newNodes = [];
+                    let hasPlug = false;
+                    if(this.lastParent.kind != 'lambda'){
+                        //It is undesirable to have a plug as the only child of a lambda; it generally just leads to a bad component. 
+                        //So we only add if the lastParent is not a lambda, meaning there has to be a function node between the lambda
+                        //and the plug.
+                        newInstanceIdx["plug"] = { outId: newNodes.length, lst: [] };
+                        newNodes.push(new Plug());
+                        hasPlug = true;
+                    }
+                    
+                    for (let idx in tmpPrograms) {
+                        let node = tmpPrograms[idx];
+                        let label = getLabel(node);   
+                        //Only add idx to plug if the node has no unbound deBroujin indices.
+                        if (node.dbidx == -1 && hasPlug) {
+                            newInstanceIdx["plug"].lst.push(idx);
+                        }                        
+                        if (label in newInstanceIdx) {
+                            newInstanceIdx[label].lst.push(idx);                            
+                        } else {
+                            newInstanceIdx[label] = { outId:newNodes.length, lst: [idx]};
+                            newNodes.push(newWithHoles(node));
+                        }
+                    }
+                    return newNodes;
+                }
+                visitInt(intn) { return [intn]; }
+                visitLambda(lambda) {
+                    let local = tmpPrograms.slice(0);
+                    for (let q in tmpPrograms) {
+                        tmpPrograms[q] = tmpPrograms[q].body;
+                    }
+                    this.lastParent = lambda;
+                    let newbodys = lambda.body.accept(this);
+                    tmpPrograms = local;
+                    return newbodys.map((newbody) => {
+                        if (newbody != lambda.body) {
+                            return new LambdaN(newbody).setState(lambda.state).setDepth();
+                        } else {
+                            return lambda;
+                        }
+                    });                    
+                }
+                visitInput(input) { return [input]; }
+                visitIndex(index) {
+                    return [index];
+                }
+            }
+
+            class score extends ASTVisitor {
+                /**
+                 * This class computes a score bound for every node in the AST. The scoreBound for the root node will be the 
+                 * scoreBound of the component.
+                 * 
+                 * @param {any} matches
+                 */
+                constructor(matches) {
+                    super();
+                    this.matches = matches;
+                    this.N = matches.length;
+                }
+                visitFun(fun) {
+                    let prevMatches = this.matches;                    
+                    let scoreBound = 0;
+                    for (let idx in fun.args) {
+                        this.matches = [];
+                        for (let i = 0; i < prevMatches.length; ++i) {
+                            this.matches.push(prevMatches[i].args[idx]);
+                        }
+                        fun.args[idx].accept(this);
+                        scoreBound += fun.args[idx].scoreBound;
+                    }
+                    this.matches = prevMatches;
+                    scoreBound += this.N;
+                    fun.scoreBound = scoreBound;
+                }
+                visitpFun(pfun) { this.visitFun(pfun); }
+                visitPlug(plug) {
+                    //This is a plug, so it has no score.
+                    plug.scoreBound = 0;
+                }
+                visitHole(hole) {
+                    let prevMatches = this.matches;  
+                    let scoreBound = 0;
+                    for (let i = 0; i < prevMatches.length; ++i) {
+                        scoreBound += prevMatches[i].size;
+                    }
+                    hole.scoreBound = scoreBound;
+                }
+                visitInt(intn) { intn.scoreBound = this.N; }
+                visitIndex(index) { index.scoreBound = this.N; }
+                visitInput(input) { input.scoreBound = this.N; }
+                visitLambda(lambda) { 
+                    let prevMatches = this.matches;  
+                    this.matches = [];
+                    for (let i = 0; i < prevMatches.length; ++i) {
+                        this.matches.push(prevMatches[i].body);
+                    }
+                    lambda.body.accept(this);
+                    lambda.scoreBound = lambda.body.scoreBound + this.N;
+                    this.matches = prevMatches;
+                }
+            }
+
+            if (candidate.complete) {
+                return [candidate];
+            }
+
+            let visitor = new grow();
+            let newProgs = candidate.construct.accept(visitor);
+            //At this point, the size of newProgrs is the same as the number of entries in newInstanceIdx.
+            //After the call to the visitor, now we have to reassemble these into a set of worklist elements.
+            let rv = [];
+            for (let label in newInstanceIdx) {
+                let component = newProgs[newInstanceIdx[label].outId];
+                let instances = newInstanceIdx[label].lst.map((idx) => candidate.instances[idx]);
+                if (instances.length > 0) {
+                    component.accept(new score(instances));
+                    rv.push({
+                        construct: component,
+                        size: component.size,
+                        instances: instances,
+                        count: instances.length,
+                        score: instances.length * component.size,
+                        scoreBound: component.scoreBound
+                    });
+                }                
+            }
+            if (rv.length == 0) {
+                candidate.complete = true;
+                return [candidate];
+            }
+            return rv;  
+        }
+
+        function collect(prog, construct) {
+            let rv = [];
+            //One requirement of components is that they cannot have unbound deBroujin indices, so we need to label every node with
+            //whether or not it has unbound deBroujin indices. Each node will have a field dbidx with the maximum unbound deBroujin index of any child node.
+
+            prog.traverse(undefined, undefined, (node) => {
+                //we label the nodes bottom up. 
+                if (node.kind == 'index') {
+                    node.dbidx = node.idx;
+                } else if (node.kind == 'fun') {
+                    node.dbidx = -1;
+                    for (let arg of node.args) {
+                        if (arg.dbidx > node.dbidx) {
+                            node.dbidx = arg.dbidx;
+                        }
+                    }
+                } else if (node.kind == 'lambda') {
+                    //if the body dbidx is zero or -1, then this node will also be -1. 
+                    if (node.body.dbidx < 1) {
+                        node.dbidx = -1;
+                    } else {
+                        node.dbidx = node.body.dbidx - 1;
+                    }
+                } else {
+                    node.dbidx = -1;
+                }
+            });
+            //We push into rv all instances of construct in the given program.
+            prog.traverse((elem) => {
+                if (elem.kind == 'fun' && construct.kind == 'fun' && elem.name == construct.name) {
+                    rv.push(elem);
+                }
+                if (elem.kind == 'lambda' && construct.kind == 'lambda') {
+                    rv.push(elem);
+                }
+
+            });
+            return rv;
+        }
+
+        function getLabel(instance) {
+            if (instance.kind == 'lambda') {
+                return 'lambda';
+            }
+            if (instance instanceof pFunN) {
+
+                return "pFun/" + instance.name + "[" + instance.param + "]";
+            }
+            if (instance instanceof FunN) {
+                return "fun/" + instance.name;
+            }
+            return instance.print();
+        }
+
+        function newWithHoles(instance) {
+            if (instance.kind == 'lambda') {
+                return new LambdaN(new Hole());
+            }
+            if (instance instanceof pFunN) {
+                return new pFunN(instance.name, instance.impP, instance.abstractP, instance.args.map((arg) => new Hole()), instance.param);
+            }
+            if (instance instanceof FunN) {
+                return new FunN(instance.name, instance.imp, instance.absfun, instance.args.map((arg) => new Hole()));
+            }
+            return instance;
+        }
+
+        function addToWorklist(wlist, instances) {
+            let instmap = {};
+            if (instances.length > 0) {
+                for (let idx in instances) {
+                    let label = getLabel(instances[idx]);
+                    if (label in instmap) {
+                        instmap[label].instances.push(instances[idx]);
+                    } else {
+                        instmap[label] = { construct: newWithHoles(instances[idx]), instances: [instances[idx]] };
+                    }
+                }
+                for (let label in instmap) {
+                    let inst = instmap[label];
+                    let totsize = inst.instances.reduce((a, b) => a + b.size, 0);
+                    inst.size = 1;
+                    inst.count = inst.instances.length;
+                    inst.score = inst.count * inst.size;
+                    inst.scoreBound = totsize;
+                    wlist.push(inst);
+                }
+            }
+            
+            return 0;
+        }
+
+        let worklist = [];
+        let componentIndex = {};        
+        for (let construct of language) {
+            let instances = programs.map((prog) => collect(prog, construct)).reduce((a, b) => a.concat(b), []);
+            addToWorklist(worklist, instances);
+            if(construct.synthetic) {
+                // If the construct is synthetic, we need to add it to the component index.
+                componentIndex[construct.source.print()] = construct;
+            };
+        }
+        //Sort the worklist so the one with the highest score comes out on top.
+        worklist.sort((a, b) => b.scoreBound - a.scoreBound);
+        while (worklist.length > 0) {
+            let newWL = worklist.map((elem) => growCandidate(elem)).reduce((a, b) => a.concat(b), []);
+            
+            newWL.sort((a, b) => b.score - a.score);
+            //Filter out any candidate that already exists in componentIndex.
+            newWL = newWL.filter((elem) => !(elem.construct.print() in componentIndex));
+           
+            let newWL2 = newWL.filter((elem) => (elem.scoreBound != elem.score || elem.size > 1) && elem.count > 1);
+            if(newWL2.length == 0 ) {
+                return undefined; // No more candidates to grow.
+            }
+            // Filter out anything whose scoreBound is less than the best score so far.
+            let bestScore = newWL2[0].score;
+            worklist = newWL2.filter((elem) => elem.scoreBound >= bestScore && elem.count > 1);
+            if(worklist.length == 0 ) {
+                return undefined; // No more candidates to grow.
+            }
+            let completed = true;
+            for (let idx in worklist) {
+                completed = completed && worklist[idx].complete;
+            }
+            if (completed) {
+                break;
+            }
+        }
+
+        return worklist[0];          
+
+    }
+
+
+    function componentize(workList, language, st) {
+        let result = stitch(workList.map((elem) => elem.prog), language);
+        if (!result) {
+            return workList;
+        }
+        function bulkMapAdd(map1, map2) {
+            for (let k in map2) {
+                map1[k] = map2[k];
+            }
+        }
+        function mapToArray(map, n) {
+            let rv = new Array(n);
+            for (let i = 0; i < n; ++i) {
+                if(i in map) {
+                    rv[i] = map[i];
+                }
+            }
+            return rv;
+        }
+        //Visitor to construct a function out of result.component;
+        class ComponentVisitor extends ASTVisitor {
+            /**
+             * The high-level idea of this class is as follows. The goal is to take an AST of the program and turn it into a function 
+             * that can be used as the implementation of a function node in language. 
+             * this.args is the total number of arguments in the function, and there is an extra argument containing the global parameters.
+             * As an example, suppose that we have a component of the form: 
+             *  foo(input("x"), int(42), \lambda plus(plug(0), $0)))
+             * Then, this will be translated into 
+             *  newfun(arg0, gps){
+             *   ((arg0, gps)=>{
+             *      return foo(((arg0, gps)=> gps['x'] )(arg0,gps), 
+             *                 ((arg0, gps)=> 42)(arg0,gps), 
+             *                 ((arg0a, gpsa)=> ( ($0)=>(  
+             *                                          ((arg0b, gpsb, $0)=>{return plus( ((arg0c,gpsc,$0c)=> arg0c)(arg0b, gpsb,$0), ((arg0c,gpsc,$0c)=> $0c)(arg0b, gpsb,$0)  ) })(arg0a, gpsa, $0)
+             *                                          )   )(arg0, gps) )
+             *   })(arg0, gps)
+             * }
+             * 
+             * @param {any} component
+             */
+            constructor(component) {
+                super();
+                this.args = 0;
+                let _this = this;
+                this.imp = undefined;
+                this.funIndex = {};
+                for (let idx in language) {
+                    let lc = language[idx];
+                    if (lc.kind == 'fun') {
+                        this.funIndex[lc.name] = lc;
+                    }
+                }
+                component.traverse((node) => {
+                    if (node.kind == 'plug') { node.argpos = _this.args; _this.args++; }
+                });
+            }   
+            visitFun(fun) {
+                const imp = this.funIndex[fun.name].imp;
+                const lazyArgs = fun.args.map((arg) => arg.accept(this));
+                return (args) => { 
+                    let finalArgs = lazyArgs.map((f) => f(args));
+                    finalArgs.push(args[args.length - 1]); // Add the global parameters as the last argument.
+                    return imp.apply(null, finalArgs);  
+                }
+            }
+            visitpFun(pfun) {
+                return this.visitFun(pfun);
+            }
+            visitLambda(lambda) {
+                const body = lambda.body.accept(this);
+                return (args) => {
+                    return (lambdaarg) => {
+                        let newargs = args.slice(0, args.length - 1);
+                        newargs.push(lambdaarg);
+                        newargs.push(args[args.length - 1]);
+                        return body(newargs);
+                    }
+                };
+            }
+            visitInput(input) {                
+                const name = input.name;
+                return (args) => args[args.length-1][name];                    
+            }
+            visitIndex(index) {
+                const idx = index.idx;
+                return (args) =>  args[args.length-2 - idx];
+            }
+            visitHole(hole) { throw "Should not be any holes at this point!"; }
+            visitPlug(plug) {
+                const idx = plug.argpos;
+                return (args) => {
+                    if (args.length <= idx) {
+                        throw "Not enough arguments provided to plug!";
+                    }
+                    return args[idx];
+                };
+            }
+            visitInt(intn) {
+                const n = intn.val;
+                return (args) => n;
+            }
+        }
+        class ComponentReplacer extends ASTVisitor {
+            /**
+             * This class will search for instances of the component in the AST and replace them with the corresponding function call.
+             * As it traverses the tree, it will maintain a mode that indicates whether it is in search mode or replace mode.
+             * In search mode, it scans for the root node of a component instance. During this stage, the visit function is expected to return 
+             * an updated version of the AST. 
+             * In replace mode, it means that it has already found a component instance, so now it is looking to match the 'plug' nodes in the 
+             * component with sub-trees in the AST that now need to be passed as arguments to the new component function. 
+             * In replace mode, the visitor returns the list of arguments found so far.
+             * In replace mode, there is an invariant that this.instance should always be the newComponent equivalent of the currently visited node at the start of visit.
+             * @param {any} result
+             */
+            constructor(result, newComponent) {
+                super();
+                this.instances = result.instances;
+                this.mode = "search"; // visitor will iterate between search and replace mode.
+                //During replace mode, the current instance will be stored in instance.
+                this.instance = undefined;
+                this.newComponent = newComponent;
+                this.result = result;
+
+            }
+            generalSearchMode(node, myfun, parentfun) {
+                let elem = this.instances.find((elem) => elem == node);
+                if (elem) {
+                    //It matches, so now we switch to replace mode, so that when we visit the children, we are going to get a list of argument nodes
+                    //that we can plug in to a new function call.
+                    this.mode = 'replace';
+                    this.instance = this.result.construct;
+                    let newargs = myfun(); //This just jumps to the this.mode == 'replace' branch
+                    let argArray = mapToArray(newargs, this.newComponent.nargs);
+                    let rv = new FunN(this.newComponent.name, this.newComponent.imp, undefined, argArray);
+                    let returntype = elem.type;
+                    let typeargs = argArray.map(arg => arg.type);
+                    let type = typeargs.reduceRight((type, arg) => new FunctionType(arg, type), returntype);
+                    if (this.type) {
+                        //For now, we assume they are all of the same type, but in reality, they should be 
+                        // antiunified to get the most general type that can be supported by the implementation.
+                        //this.type = this.type.antiunify(type);
+                    } else {
+                        this.type = type;
+                        this.newComponent.type = type;
+                        this.newComponent.returntype = returntype;
+                        this.newComponent.typeargs = typeargs;
+                    }
+                    rv.type = returntype;                   
+                    this.mode = 'search';
+                    return rv;
+                } else {
+                    return parentfun();
+                }
+            }
+            checkAndSetArg(node, rest) {
+                if (this.instance.kind == 'plug') {
+                    let plug = this.instance;
+                    //We have reached a plug, and therefore an argument to the function.
+                    let rv = {};
+                    rv[plug.argpos] = node;
+                    return rv;
+                } else {
+                    if (rest) {
+                        return rest();
+                    } else {
+                        return {};
+                    }                    
+                }
+            }
+            visitFun(fun) {
+                if (this.mode == 'search') {
+                    let _this = this;
+                    return this.generalSearchMode(fun, () => _this.visitFun(fun), ()=>super.visitFun(fun));           
+                } else {
+                    return this.checkAndSetArg(fun, () => {
+                        let args = fun.args;
+                        let rv = {};
+                        let origInstance = this.instance;
+                        for (let idx in args) {
+                            this.instance = this.instance.args[idx];
+                            let arg = args[idx].accept(this);
+                            bulkMapAdd(rv, arg); //This will add the arguments to the rv object, which is a map of argument names to argument nodes.
+                            this.instance = origInstance; //Reset the instance to the original component.
+                        }
+                        return rv;
+                    });                    
+                }
+            }
+            visitpFun(pfun) {
+                return this.visitFun(pfun);
+            }
+            visitLambda(lambda) {
+                if (this.mode == 'search') {
+                    let _this = this;
+                    return this.generalSearchMode(lambda, () => _this.visitLambda(lambda), () => super.visitLambda(lambda));
+                } else {
+                    //There is an invariant that instance should equal fun here.
+                    return this.checkAndSetArg(lambda, () => {
+                        let body = this.instance.body;
+                        this.instance = body;
+                        let rv = lambda.body.accept(this);
+                        return rv;
+                    });
+                }
+            }
+            visitInput(input) {
+                if (this.mode == 'search') {
+                    return this.generalSearchMode(input, () => { return {}; } , () => input);
+                } else {
+                    return this.checkAndSetArg(input);                    
+                }
+            }
+            visitIndex(index) {
+                if (this.mode == 'search') {
+                    return this.generalSearchMode(index, () => { return {}; }, () => index);
+                } else {
+                    return this.checkAndSetArg(index);
+                }
+            }
+            visitInt(intn) {
+                if (this.mode == 'search') {
+                    return this.generalSearchMode(intn, () => { return {}; }, () => intn);
+                } else {
+                    return this.checkAndSetArg(intn);
+                }
+            }
+            visitHole(hole) {
+                throw "no holes at this point!";
+            }
+            visitPlug(plug) {
+                throw "no holes at this point!";
+            }
+
+        }
+        function resetStates(prog) {
+            // sets the state of every node.
+            let myState = st.startState();            
+            prog.traverse((node) => {
+                node.setState(myState);                
+                if ((node.kind != 'fun' && node.kind != 'lambda') || (node.kind == 'fun' && node.args.length == 0)) {
+                    node.childstate = st.transition(myState, node, 0);
+                } else {
+                    myState = st.transition(myState, node, 0);
+                    node.curChild = 0;
+                }
+
+            }, (node) => {
+                node.curChild++;
+                myState = st.transition(node.state, node, node.curChild);
+            }, (node) => {     
+                if ('curChild' in node) { delete node.curChild; }
+                node.setDepth();
+            });
+            return prog;
+        }
+        let visitor = new ComponentVisitor(result.construct);
+        let imp = result.construct.accept(visitor);
+        let name = "__foo" + language.length;
+        function myImp() {
+            let args = new Array(arguments.length);
+            for (let i = 0; i < arguments.length; ++i) { args[i] = arguments[i]; }
+            return imp(args);
+        }
+        let langEntry = {
+            name: name,
+            kind: 'fun',
+            nargs: visitor.args,
+            imp: myImp,
+            pos: language.length,
+            synthetic: true,
+            source: result.construct
+        };        
+        let replacer = new ComponentReplacer(result, langEntry);
+        workList = workList.map((elem) => {
+            return { prog: resetStates(elem.prog.accept(replacer)), score: elem.score }
+        });
+        language.push(langEntry);
+        workList.forEach((elem) => st.scoreTree(elem.prog, (1 - elem.score) * 100));
+        st.resetPolicyCache();
+        return workList;
     }
 
 
@@ -1205,7 +2015,9 @@
                     let totreward = 0;
                     if (tstate) {
                         totreward += rescale(tstate.reward);
-                    }
+                    }else {
+                        totreward += zeroR;
+                    } 
                     total += totreward;
                     rv.push(totreward);
                 }
@@ -1922,8 +2734,11 @@
 
         function solprint() {
             let sol = this;
-            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print();
-
+            let synthetics = "";
+            if (sol.synthetic) {
+                synthetics = '\n' + sol.synthetic.map((elem) => elem.name + " : " + elem.source.print() + "\n").reduce((acc, elem) => acc + elem, "");
+            }
+            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print() + synthetics;
         }
 
 
@@ -2083,10 +2898,24 @@
 
             let rejubudget = 300;
             let lastCacheReset = budget;
+            let highScore = workList[0].score;
+            let lowScore = workList[beamsize - 1].score;
+            let lastHighLowChange = budget;
             while (budget > 0) {
+                console.log(budget, ": scores \t ", workList[0].score, " - ", workList[beamsize - 1].score);
                 if (lastCacheReset - budget > 100) {
                     st.resetPolicyCache();
                     lastCacheReset = budget;
+                }
+                if(highScore != workList[0].score || lowScore != workList[beamsize - 1].score) {
+                    lastHighLowChange = budget;
+                    highScore = workList[0].score;
+                    lowScore = workList[beamsize - 1].score;
+                }
+                if(budget < lastHighLowChange - 5000) {
+                    //high and low scores have not changed in a while, so let's create some components and see what happens.
+                    // workList = componentize(workList, language, st); //commenting out componentization for now.
+                    lastHighLowChange = budget;
                 }
                 tc.reset();
                 --budget;
@@ -2138,11 +2967,16 @@
                 workList.sort((a, b) => quant(a) - quant(b));                 
                 if (workList[0].score < threshold) {
                     //All outputs correct enough, we are done!
-                    //return an object with the program, the status, the score, and the budget. 
+                    //return an object with the program, the status, the score, and the budget.
                     //it also has a print function that returns a string representation of the object.
-                    return { prog: workList[0].prog, status: "CORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+                    let synthetic = language.filter((elem) => elem.synthetic);
+                    return {
+                        prog: workList[0].prog, status: "CORRECT", score: workList[0].score, cost: initBudget - budget,
+                        synthetic:synthetic,
+                        initBudget: initBudget, crashing: 0, print: solprint
+                    };
                 }
-                if (budget == rejuvenate) {
+                if (budget == rejuvenate) {                    
                     for (let i = beamsize / 2; i < beamsize; ++i) {
                         let adjusted = randomProgram(language, bound);
                         if (adjusted instanceof Error) {
@@ -2160,7 +2994,12 @@
                     rejuvenate = budget - rejubudget;
                 }
             }
-            return { prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+            let synthetic = language.filter((elem) => elem.synthetic);
+            return {
+                prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, cost: initBudget - budget,
+                synthetic:synthetic,
+                initBudget: initBudget, crashing: 0, print: solprint
+            };
         }
 
 
@@ -2409,7 +3248,7 @@
                             if (newargs.length == 0) {
                                 rv.childstate = st.transition(node.state, rv, 0);
                             }
-                            rv.type = expectedType;
+                            rv.type = expectedType || node.type;
                             rv.setDepth();
                             return rv.setState(node.state);
 
@@ -2479,19 +3318,24 @@
 
 
 
+
+        function processFunctionType(c) {
+            let type = c.type;
+            let nargs = c.nargs;
+            let typeargs = [];
+            for (let i = 0; i < nargs; ++i) {
+                typeargs.push(type.from);
+                type = type.to;
+            }
+            c.typeargs = typeargs;
+            c.returntype = type;    
+        }
+
         function processLanguage(language, inputspec) {
             let rv = language.map(
                 (c, idx) => {
                     if (c.kind == "fun") {
-                        let type = c.type;
-                        let nargs = c.nargs;
-                        let typeargs = [];
-                        for (let i = 0; i < nargs; ++i) {
-                            typeargs.push(type.from);
-                            type = type.to;
-                        }
-                        c.typeargs = typeargs;
-                        c.returntype = type;                        
+                        processFunctionType(c);                    
                         return c;
                     } if (c.kind == "int") {
                         c.type = new Primitive("int");                        
