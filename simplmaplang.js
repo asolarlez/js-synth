@@ -280,27 +280,27 @@ let maplanguage = [
 ]
 let problems = {
     "mapincrement": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("list[int]") }],
         io: [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
             { in: { x: [5, 6, 9] }, out: [6, 7, 10] }],
         depth: 4
     },
     "reducebasic": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("int") }],
         io: [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
             { in: { x: [7, 0, 0] }, out: 7 }],
         depth: 4
     },
     "2dreduce": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[list[int]]") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("list[list[int]]") }, { kind: "output", type: Tp("list[int]") }],
         io:[{ in: { x: [[1, 2], [3, 4]] }, out: [3, 7] },
         { in: { x: [[5, 6], [9, 10]] }, out: [11, 19] },
             { in: { x: [[7, 0], [1, 2, 3], [2, 3]] }, out: [7, 6, 5] }],
         depth:6
     },
     "prodreduce": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("int") }],
         io:[{ in: { x: [1, 2, 3] }, out: 6 },
             { in: { x: [5, 2, 3] }, out: 30 },
             { in: { x: [7, 0, 0] }, out: 0 }],

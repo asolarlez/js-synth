@@ -27,7 +27,7 @@
         return rv;
     }
 
-    // Math.random = debugRandom;
+    //Math.random = debugRandom;
 
 
     let NOVALUE = "NOVAL@#";
@@ -1284,7 +1284,7 @@
                     }
                     
                     if (changed) {                        
-                        return newargs.map((pfunargs) => new FunN(fun.name, fun.impP, fun.abstractP, pfunargs).setDepth());
+                        return newargs.map((pfunargs) => new FunN(fun.name, fun.imp, fun.abstract, pfunargs).setDepth());
                     } else {
                         return [fun];
                     }
@@ -1649,19 +1649,13 @@
                 this.args = 0;
                 let _this = this;
                 this.imp = undefined;
-                this.funIndex = {};
-                for (let idx in language) {
-                    let lc = language[idx];
-                    if (lc.kind == 'fun') {
-                        this.funIndex[lc.name] = lc;
-                    }
-                }
+                
                 component.traverse((node) => {
                     if (node.kind == 'plug') { node.argpos = _this.args; _this.args++; }
                 });
             }   
             visitFun(fun) {
-                const imp = this.funIndex[fun.name].imp;
+                const imp = fun.imp;
                 const lazyArgs = fun.args.map((arg) => arg.accept(this));
                 return (args) => { 
                     let finalArgs = lazyArgs.map((f) => f(args));
@@ -1922,8 +1916,8 @@
             
             let total;
             let scores;
-            if (pckey in this.policyCache) {
-                let tmp = this.policyCache[pckey];
+            let tmp = this.policyCache[pckey];
+            if (tmp) {                
                 total = tmp.total;
                 scores = tmp.scores;
                 let el = 0;
@@ -2392,7 +2386,7 @@
         let cc = new NullConstraintChecker();
         let st = new StatsTracker();
         let tc = new TypeChecker();
-        function randomProgram(language, bound, extras, localenv, state, expectedType, initialBound) {
+        function randomProgram(expectedType, language, bound, extras, localenv, state, initialBound) {
             if (initialBound == undefined) {
                 initialBound = bound;
             }
@@ -2465,7 +2459,7 @@
                     }
                     for (let i = 0; i < n; ++i) {
                         let newstate = st.transition(state, rv, i);
-                        let arg = randomProgram(language, bound - 1, extras, localenv, newstate, tc.convert(construct.typeargs[i], rv.id), initialBound);
+                        let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, extras, localenv, newstate, initialBound);
                         cc.goback(rv);
                         if (arg instanceof Error) {
                             //If i==0 and arg.narg == 0, it means that this whole node is unsatisfiable. 
@@ -2514,7 +2508,7 @@
                     
                     st.trackAction(state, rv);
                     let newstate = st.transition(state, rv, 0);
-                    let body = randomProgram(language, bound - 1, args, undefined, newstate, typeTo, initialBound);
+                    let body = randomProgram(typeTo, language, bound - 1, args, undefined, newstate, initialBound);
                     cc.goback(rv);
                     rv.body = body;
                     if (body instanceof Error) {
@@ -2662,7 +2656,7 @@
                     cc.goback(prog);
                 }
                 st.trackAction(prog.state, prog);
-                let replacement = randomProgram(language, bound - 1, [], st.transition(prog.state, prog, lidx));
+                let replacement = randomProgram(undefined, language, bound - 1, [], st.transition(prog.state, prog, lidx));
                 if (replacement instanceof Error) {
                     console.log("randomizeLocalizedError1 FAILED")
                     return false;
@@ -2683,7 +2677,7 @@
             let idx = -1;
             let newEnvt = badRes.envt.map((x) => { ++idx; return new deBroujin(idx); });
             st.trackAction(badRes.main.state, badRes.main);
-            let replacement = randomProgram(language, badRes.level - 1, newEnvt, badRes.envt, st.transition(badRes.main.state, badRes.main, badRes.child_idx));
+            let replacement = randomProgram(undefined, language, badRes.level - 1, newEnvt, badRes.envt, st.transition(badRes.main.state, badRes.main, badRes.child_idx));
             if (replacement instanceof Error) {
                 //Local fix did not work. We need a more global fix. We'll try replacing the parent.
                 cc.reset();
@@ -2694,7 +2688,7 @@
                         cc.goback(badRes.parent);
                     }
                     st.trackAction(badRes.parent.state, badRes.parent);
-                    let replacement2 = randomProgram(language, badRes.level, newEnvt, badRes.envt, st.transition(badRes.parent.state, badRes.parent, badRes.parent_idx));
+                    let replacement2 = randomProgram(undefined, language, badRes.level, newEnvt, badRes.envt, st.transition(badRes.parent.state, badRes.parent, badRes.parent_idx));
                     if (replacement2 instanceof Error) {
                         if (prog instanceof FunN) {
                             for (let i = 0; i < 5; ++i) {
@@ -2742,7 +2736,7 @@
         }
 
 
-        function smcSynth(language, examples, prog, bound, budget) {
+        function smcSynth(language, examples, bound, budget, outType) {
             let beamsize = 20;
             let out; 
             const initBudget = budget;
@@ -2756,7 +2750,7 @@
             }
             for (let i = 0; i < beamsize; ++i) {               
                 tc.reset();
-                let newprog = randomProgram(language, bound);
+                let newprog = randomProgram(outType, language, bound);
                 out = runOrLocalize(examples, newprog, bound);
                 score = scoreOutputs(examples, out);
                 st.scoreTree(newprog, (1 - score) * 100);
@@ -2843,22 +2837,18 @@
          * @param {any} bound
          * @param {any} budget
          */
-        function randomAndHillClimb(language, examples, prog, bound, budget) {
+        function randomAndHillClimb(language, examples, bound, budget, outType) {
             let beamsize = 10;
-            let out = runOrLocalize(examples, prog, bound);
+            let out ;
             const initBudget = budget;
             let rejuvenate = 0;
+            let compStep = 10000;
 
-
-            if (isBadResult(out)) {
-                console.log(prog.print());
-                throw "Should never happen";
-            }
-            let score = scoreOutputs(examples, out);
+            let score; 
             let workList = [];
             for (let i = 0; i < beamsize; ++i) {
                 tc.reset();
-                let newprog = randomProgram(language, bound);
+                let newprog = randomProgram(outType, language, bound);
                 out = runOrLocalize(examples, newprog, bound);
                 score = scoreOutputs(examples, out);
                 st.scoreTree(newprog, (1 - score) * 100);
@@ -2901,8 +2891,9 @@
             let highScore = workList[0].score;
             let lowScore = workList[beamsize - 1].score;
             let lastHighLowChange = budget;
+
             while (budget > 0) {
-                console.log(budget, ": scores \t ", workList[0].score, " - ", workList[beamsize - 1].score);
+                //console.log(budget, ": scores \t ", workList[0].score, " - ", workList[beamsize - 1].score);
                 if (lastCacheReset - budget > 100) {
                     st.resetPolicyCache();
                     lastCacheReset = budget;
@@ -2912,17 +2903,19 @@
                     highScore = workList[0].score;
                     lowScore = workList[beamsize - 1].score;
                 }
-                if(budget < lastHighLowChange - 5000) {
+                if(false && budget < lastHighLowChange - compStep) {
                     //high and low scores have not changed in a while, so let's create some components and see what happens.
-                    // workList = componentize(workList, language, st); //commenting out componentization for now.
+                    workList = componentize(workList, language, st); //commenting out componentization for now.
+                    console.log(budget, ": Componentized");
                     lastHighLowChange = budget;
+                    compStep = compStep * 2;
                 }
                 tc.reset();
                 --budget;
                 
                 const probReplace = 0.5; // Math.min(0.5, 1.5*workList[beamsize-1].score);
                 if (Math.random() < probReplace) {
-                    let adjusted = randomProgram(language, bound);
+                    let adjusted = randomProgram(outType, language, bound);
                     if (adjusted instanceof Error) {
                         console.log("randomAndHillClimb1 FAILED")
                         return;
@@ -2978,7 +2971,7 @@
                 }
                 if (budget == rejuvenate) {                    
                     for (let i = beamsize / 2; i < beamsize; ++i) {
-                        let adjusted = randomProgram(language, bound);
+                        let adjusted = randomProgram(outType, language, bound);
                         if (adjusted instanceof Error) {
                             console.log("randomAndHillClimb1 FAILED")
                             return;
@@ -3013,10 +3006,12 @@
          * @param {any} budget
          * @returns { prog: bestSolution, status: "INCORRECT"|"CORRECT", score: bestScore, budget: 0, crashing: how many times has it crashed?, print: solprint };
          */
-        function randomRandom(language, examples, prog, bound, budget) {
+        function randomRandom(language, examples, bound, budget, outType) {
             let bestSolution = undefined;
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
+
+            let prog = randomProgram(outType, language, bound);
             let out = runOrLocalize(examples, prog, bound);
             const initBudget = budget;
             
@@ -3043,7 +3038,7 @@
                             log(1, "New best solution", score, ()=>bestSolution.print());
                         }
                         tc.reset();
-                        prog = randomProgram(language, bound); //randomizeClone(language, prog, bound);
+                        prog = randomProgram(outType, language, bound); //randomizeClone(language, prog, bound);
                         --budget;
                         out = runOrLocalize(examples, prog, bound);
                     }
@@ -3056,7 +3051,7 @@
 
 
 
-        function runAndFixB(language, examples, prog, bound, budget) {
+        function runAndFixB(language, examples, prog, bound, budget, outType) {
             let bestSolution = undefined;
             let bestOutput = undefined;
             let bestScore = 100000;//score is an error, so bigger is worse.
@@ -3194,7 +3189,7 @@
                     }
                     return node;
                 } else {
-                    let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
+                    let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
                     if (rv instanceof Error) {
                         cc.advance(node);
                         return node;
@@ -3254,7 +3249,7 @@
 
                         } else {
                             //If the argument didn't change, I am going to give it a chance to rewrite this node.
-                            let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
+                            let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
                             if (rv instanceof Error) {
                                 cc.advance(node);
                                 return node;
@@ -3296,7 +3291,7 @@
 
                     return node;
                 } else {
-                    let rv = randomProgram(language, lbound, envt, undefined, node.state, expectedType, lbound);
+                    let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
                     if (rv instanceof Error) {
                         cc.advance(node);
                         return node;
@@ -3345,23 +3340,25 @@
                     }
                 }
             );
-            rv = rv.concat(inputspec);
+            rv = rv.concat(inputspec.filter((elem) => elem.kind =="input"));
             rv.map((c, idx) => { c.pos = idx; return c; });
             return rv;
         }
 
-
+        let outspec = inputspec.filter((elem) => elem.kind == "output");
+        let outType = undefined;
+        if (outspec.length != 0) {
+            outType = outspec[0].type;
+        }
 
         let langWithInputs = processLanguage(language, inputspec);
-
-        let rp = randomProgram(langWithInputs, bound);     
-
+        
 
         randomizeClone = fancyRandClone; // simpleRandClone
 
         let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;  // //
 
-        let rv = synthesizer(langWithInputs, examples, rp, bound, N);
+        let rv = synthesizer(langWithInputs, examples, bound, N, outType);
 
         return rv;
 

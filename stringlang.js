@@ -255,7 +255,7 @@ function fancyStringScore(examples, outputs) {
 const problems = {
 
     "parenthesis": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
         io: [{ in: { x: "(hello) world" }, out: "hello" },
         { in: { x: "this is (the) word" }, out: "the" },
             { in: { x: "a (good) example" }, out: "good" },
@@ -263,21 +263,21 @@ const problems = {
         depth: 3
     },
     "outer-parenthesis": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
         io: [{ in: { x: "(hello) world" }, out: "(hello)" },
         { in: { x: "this is (the) word" }, out: "(the)" },
         { in: { x: "a (good) example" }, out: "(good)" }],
         depth: 3
     },
     "numbers": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
         io: [{ in: { x: "(hello) world 57" }, out: "57" },
         { in: { x: "this is (the) word 33" }, out: "33" },
         { in: { x: "a (good) example 22" }, out: "22" }],
         depth: 3
     },
     "combined": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("string") }, {kind:"output", type:Tp("string")}],
         io: [{ in: { x: "(hello) world 57" }, out: "hello57" },
         { in: { x: "this is (the) word 33" }, out: "the33" },
         { in: { x: "a (good) example 22" }, out: "good22" }],

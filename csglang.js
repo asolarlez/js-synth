@@ -188,7 +188,7 @@ let l = {
 const problems = {
 
     "circleRect": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
         prog: l.union(l.circle(3, 3, 1), l.rect(3, 2, 3, 2)),
         io: [{ in: { x: {x:2, y:3} } },
             { in: { x: { x: 3, y: 3 } } },
@@ -201,7 +201,7 @@ const problems = {
     },
 
     "circleLoop": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
         prog: l.loop(l.circle(3, 3, 1), 1, 0, 4),
         io: [{ in: { x: { x: 1, y: 2 } } },
             { in: { x: { x: 2, y: 3 } } },
@@ -214,7 +214,7 @@ const problems = {
         depth: 3
     },
     "loopDif": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }],
+        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
         prog: l.dif(l.loop(l.circle(3, 3, 1), 1, 0, 4),
             l.rect(3, 3, 3, 2)),
         io: [
