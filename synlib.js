@@ -1971,7 +1971,9 @@
         }
 
         succScores(state, language, extras) {
-            let rv = [];
+            let sz = language.length + (extras ? extras.length : 0);
+            let rv = new Float32Array(sz);
+            let rvidx = 0;
             let total = 0;
             function rescale(score) {
                 //(tanh((x-50)/ 50) + 1) / 2
@@ -1992,7 +1994,7 @@
                     totreward = zeroR;
                 }               
                 total += totreward;
-                rv.push(total);
+                rv[rvidx] = total; ++rvidx;                
             }
             if (extras) {
                 for (let i = 0; i < extras.length; ++i) {
@@ -2006,7 +2008,7 @@
                         totreward = zeroR;
                     } 
                     total += totreward;
-                    rv.push(total);
+                    rv[rvidx] = total; ++rvidx;
                 }
             }            
             return rv;
