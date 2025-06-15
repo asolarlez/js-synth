@@ -615,69 +615,6 @@
     }
 
 
-    function holify(prog, childIdx) {
-        let probBound = 0.5;
-        let hasChildIdx = false;
-        if (childIdx !== undefined) {
-            hasChildIdx = true;
-        }
-        function traverse(node, lvl) {
-            if (Math.random() > probBound || lvl == 0) {
-                if (node instanceof FunN) {
-                    let changed = false;
-                    let newargs = node.args.map((arg, idx) => {
-                        if (hasChildIdx && lvl == 0) {
-                            changed = true;
-                            if (idx == childIdx) {
-                                return traverse(arg, lvl + 1);
-                            } else {
-                                return new Hole();
-                            }
-                        } else {
-                            let rv = traverse(arg, lvl + 1);
-                            if (rv != arg) {
-                                changed = true;
-                            }
-                            return rv;
-                        }
-                    });
-                    if (changed) {
-                        let rv;
-                        if (node.isParametric()) {
-                            rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
-                        } else {
-                            rv = (new FunN(node.name, node.imp, node.absfun, newargs));
-                        }                           
-                        if (newargs.length == 0) {
-                            rv.childstate = st.transition(node.state, rv, 0);
-                        }
-                        return rv.setState(node.state);
-                    } else {
-                        return node;
-                    }
-                }
-                if (node instanceof LambdaN) {
-                    let newbody = traverse(node.body, lvl + 1);
-                    if (newbody != node.body) {
-                        return (new LambdaN(newbody)).setState(node.state);
-                    } else {
-                        return node;
-                    }
-                }
-                return node;
-            } else {
-                return new Hole();
-            }
-        }
-
-        let rv = traverse(prog, 0);
-
-        return rv;
-    }
-
-
-
-
     function isBadResult(res) {
         return res instanceof BadResult;
     }
@@ -2094,294 +2031,13 @@
 
 
 
-    class ConstraintChecker {
-        constructor() {
-            this.constraints = {};
-            this.searchState = [];
-        }
-
-        print() {
-            function printAll(set, indent) {
-                let rv = "";
-                for (let key in set) {
-                    let lbl = "";
-                    if ('val' in set[key]) {
-                        lbl = "." + set[key].val;
-                    }
-                    if (set[key].endpt) {
-                        lbl += "!";
-                    }
-                    rv += indent + key + lbl + "->{\n" + printAll(set[key].succ, indent + "  ") + indent + "}\n";
-                }
-                return rv;
-            }
-            return printAll(this.constraints, "");
-        }
-
-
-
-        addConstraint(badRes, envt, limit) {
-            if (limit == undefined) {
-                limit = 1000;
-            }
-
-            let lst = [];
-
-
-            function enter(node) {
-                let kind = getLabel(node, "enter");
-                let entry = { kind: kind, label: "enter" };
-                if (node.kind == "index") {
-                    let idx = envt.length - 1 - node.idx;
-                    if (idx < envt.length) {
-                        entry.val = envt[idx];
-                        entry.kind += "." + entry.val.toString();
-                    } else {
-                        console.log("Should never happen!");
-                    }
-                }
-                if (node.kind == "lambda") {
-                    envt.push(NOVALUE);
-                }
-                lst.push(entry);
-            }
-            function reenter(node) {
-                let kind = getLabel(node, "return");
-                let entry = { kind: kind, label: "return" };
-                lst.push(entry);
-            }
-            function exit(node) {
-                if (node.kind == "lambda") {
-                    envt.pop();
-                }
-            }
-
-            if (badRes instanceof BadResult) {
-                envt = badRes.envt;
-                enter(badRes.main);
-                let hole = new Hole();
-                for (let i = 0; i < badRes.child_idx; ++i) {
-                    enter(hole);
-                    reenter(badRes.main);
-                }
-                badRes.main.args[badRes.child_idx].traverse(enter, reenter, exit);
-            } else {
-                badRes.traverse(enter, reenter, exit);
-            }
-
-
-            let lastEnter = 0;
-            for (let i = 0; i < lst.length; ++i) {
-                if (lst[i].label == "enter" && lst[i].kind != "hole/enter") {
-                    lastEnter = i;
-                }
-            }
-            lst[lastEnter].endpt = true;
-
-            if (lastEnter > limit) {
-                return;
-            }
-
-            lst = lst.slice(0, lastEnter + 1);
-
-            let constraints = this.constraints;
-
-            for (let entry of lst) {
-                if (entry.kind in constraints) {
-                    if (entry.endpt) {
-                        constraints[entry.kind].endpt = true;
-                    }
-                    constraints = constraints[entry.kind].succ;
-                } else {
-                    constraints[entry.kind] = entry;
-                    entry.succ = {};
-                    constraints = entry.succ;
-                }
-            }
-        }
-
-        /**
-         * 
-         * 
-         * @param {any} nodeType
-         * @param {any} id
-         * @param {any} stage Can be "enter" or "return"
-         * @returns 
-         */
-        checkStep(node, envt) {
-            let stage = "enter";
-            let label = getLabel(node, stage);
-            let label2 = undefined;
-            if (node.kind == "index") {
-                if (envt && envt.length > node.idx) {
-                    label2 = label + "." + envt[envt.length - 1 - node.idx];
-                }
-
-                label = label + "." + NOVALUE;
-                //if the node is "lambda, we need to check against two labels, .val and .NOVALUE";
-            }
-            for (let st of this.searchState) {
-                let state = st.state;
-                if (label in state.succ) {
-                    if (state.succ[label].endpt) {
-                        return false;
-                        //if (label == "index/enter") {
-                        //    //only return false if the re is an envt and the values match.
-                        //    if (state.succ[label].val == NOVALUE ||
-                        //        (envt && envt[envt.length - 1 - node.idx] == state.succ[label].val)) {
-                        //        return false;
-                        //    }
-                        //} else {
-                        //    //If this is an endpoint, we can't go any further.
-                        //    return false;
-                        //}
-
-                    }
-                }
-                if (label2 && label2 in state.succ) {
-                    if (state.succ[label2].endpt) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-        reset() {
-            //console.log("Reset");
-            this.searchState = [];
-        }
-        advance(node, envt) {
-            //console.log("advance", node.print? node.print(): node);
-            let stage = "enter";
-            let label = getLabel(node, stage);
-            let label2 = undefined;
-            if (node.kind == "index") {
-                if (envt && envt.length > node.idx) {
-                    label2 = label + "." + envt[envt.length - 1 - node.idx];
-                }
-
-                label = label + "." + NOVALUE;
-                //if the node is "lambda, we need to check against two labels, .val and .NOVALUE";
-            }
-            //First, see which of the current search states can be advanced from the current node.
-            let oldState = this.searchState;
-            let newSearchState = [];
-            for (let st of this.searchState) {
-                let state = st.state;
-                for (let nxtlabel in state.succ) {
-                    let nxt = state.succ[nxtlabel];
-                    if (nxt.kind == label) {
-                        newSearchState.push({ state: nxt, instance: node.id }); //For regular nodes, instance is the id of the node.                                        
-                    }
-                    if (label2 && nxt.kind == label2) {
-                        newSearchState.push({ state: nxt, instance: node.id }); //For regular nodes, instance is the id of the node.                                        
-                    }
-                    if (nxt.kind == "hole/enter") {
-                        newSearchState.push({ state: nxt, instance: st.instance }); //For hole nodes, it's the id of the parent that we go back to.
-                    }
-                }
-                if (state.kind == "hole/enter") {
-                    newSearchState.push(st);
-                }
-            }
-            this.searchState = newSearchState;
-            //Then add new search states for the current node.
-            if (label in this.constraints) {
-                let current = this.constraints[label];
-                this.searchState.push({ state: current, instance: node.id });
-            }
-            return oldState;
-        }
-
-        retract(oldState) {
-            //console.log("retract", oldState);
-            this.searchState = oldState;
-        }
-        goback(node) {
-            //console.log("goback", node.print ? node.print() : node);
-            let stage = "return";
-            let label = getLabel(node, stage);
-            let newSearchState = [];
-            for (let st of this.searchState) {
-                let state = st.state;
-                //If the current node st is a hole node, then we either
-                //stay in the hole node or advance if nxt is a return node and node.id matches the
-                //id of the st node. 
-                if (state.kind == "hole/enter") {
-                    if (label in state.succ) {
-                        let nxt = state.succ[label];
-                        if (st.instance == node.id) {
-                            newSearchState.push({ state: nxt, instance: node.id });
-                        } else {
-                            newSearchState.push(st);
-                        }
-                    } else {
-                        newSearchState.push(st);
-                    }
-                } else {
-                    //if we are not in a hole node, we just advance if the label matches.
-                    if (label in state.succ) {
-                        let nxt = state.succ[label];
-                        newSearchState.push({ state: nxt, instance: node.id });
-                    }
-                }
-            }
-            this.searchState = newSearchState;
-        }
-
-    }
-
-
-
-    class NullConstraintChecker {
-        constructor() {            
-        }
-
-        print() {
-           
-        }
-
-
-
-        addConstraint(badRes, envt, limit) {
-           
-        }
-
-        /**
-         * 
-         * 
-         * @param {any} nodeType
-         * @param {any} id
-         * @param {any} stage Can be "enter" or "return"
-         * @returns 
-         */
-        checkStep(node, envt) {
-            return true;
-        }
-        reset() {
-            
-        }
-        advance(node, envt) {
-            
-        }
-
-        retract(oldState) {
-           
-        }
-        goback(node) {
-            
-        }
-
-    }
-
-
 
 
     function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N) {
-        let cc = new NullConstraintChecker();
+        
         let st = new StatsTracker();
         let tc = new TypeChecker();
-        function randomProgram(expectedType, language, bound, extras, localenv, state, initialBound) {
+        function randomProgram(expectedType, language, bound, extras, state, initialBound) {
             if (initialBound == undefined) {
                 initialBound = bound;
             }
@@ -2400,8 +2056,7 @@
                     }
                 }
                 if (construct) {
-                    let chk = cc.checkStep(construct, localenv);
-                    chk = chk && tc.checkStep(construct, expectedType);
+                    let chk = tc.checkStep(construct, expectedType);
                     let i = 0;
                     while (!chk && construct) {
                         st.failedAction(state, construct);
@@ -2414,8 +2069,7 @@
                             }
                         }
                         if (construct) {
-                            chk = cc.checkStep(construct, localenv);
-                            chk = chk && tc.checkStep(construct, expectedType);
+                            chk = tc.checkStep(construct, expectedType);
                         }                        
                     }
                 } 
@@ -2429,7 +2083,7 @@
                 st.failedState(state);
                 return new Error(0); // Error 0 means that this node was unsatisfiable. 
             }
-            let oldState;
+            
             let oldTypes = tc.checkpoint();
 
             function fleshOutConstruct(construct) {
@@ -2443,7 +2097,7 @@
                     } else {
                         rv = new FunN(construct.name, construct.imp, construct.abstract, args);
                     }
-                    oldState = cc.advance(rv, localenv);
+                    
                     if (!tc.addConstraint(expectedType, construct.returntype, rv.id)) {
                         return new Error(0);
                     }
@@ -2454,8 +2108,8 @@
                     }
                     for (let i = 0; i < n; ++i) {
                         let newstate = st.transition(state, rv, i);
-                        let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, extras, localenv, newstate, initialBound);
-                        cc.goback(rv);
+                        let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, extras, newstate, initialBound);
+                        
                         if (arg instanceof Error) {
                             //If i==0 and arg.narg == 0, it means that this whole node is unsatisfiable. 
                             if (i == 0 && arg.narg == 0) {
@@ -2474,7 +2128,7 @@
                 if (construct.kind == "int") {
                     let randval = Math.floor(Math.random() * (construct.range[1] - construct.range[0] + 1) + construct.range[0]);
                     let rv = new IntN(randval, construct.range);                                        
-                    oldState = cc.advance(rv, localenv);
+                    
                     rv.state = state;
                     rv.childstate = st.transition(state, rv, 0);
                     if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
@@ -2486,7 +2140,7 @@
                     let args;
                     let rv = new LambdaN(HOLE);
                     rv.state = state;
-                    oldState = cc.advance(rv, localenv);
+                    
                     if (!expectedType) {
                         //should not produce lambdas if we don't know what type the argument is going to be.
                         return new Error(0);
@@ -2503,8 +2157,8 @@
                     
                     st.trackAction(state, rv);
                     let newstate = st.transition(state, rv, 0);
-                    let body = randomProgram(typeTo, language, bound - 1, args, undefined, newstate, initialBound);
-                    cc.goback(rv);
+                    let body = randomProgram(typeTo, language, bound - 1, args, newstate, initialBound);
+                    
                     rv.body = body;
                     if (body instanceof Error) {
                         return body;
@@ -2512,7 +2166,7 @@
                     return rv;
                 }
                 if (construct.kind == "input") {
-                    oldState = cc.advance(construct, localenv);                    
+                                       
                     if (!tc.addConstraint(expectedType, construct.type)) {
                         return new Error(0);
                     }
@@ -2524,7 +2178,7 @@
                 }
                 if (construct.kind == "index") {
                     let rv = new deBroujin(construct.idx);
-                    oldState = cc.advance(rv, localenv);
+                    
                     if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
                         return new Error(0);
                     }                                        
@@ -2546,7 +2200,7 @@
                         st.failedAction(state, construct);
                         construct = st.nextConstruct(construct, initialConst, state, language, extras);
                         advanceConstruct();                   
-                        cc.retract(oldState);
+                        
                         tc.revert(oldTypes);
                     } else {
                         //This means that this construct failed, but it might be fixable by regenerating it.
@@ -2558,7 +2212,7 @@
                             construct = st.randomConstruct(state, language, extras);
                             initialConst = construct.pos;
                             advanceConstruct();
-                            cc.retract(oldState);
+                            
                             tc.revert(oldTypes);
                         } else {
                             return new Error(out.narg + 1);
@@ -2598,129 +2252,12 @@
                 ++idx;
             }
             if (bestBad) {
-                let main = bestBad.main;
-                //console.log("Bad Child", main.print());
-                for (let i = 0; i < 5; ++i) {
-                    let light = holify(main, bestBad.child_idx);
-
-                    let lightOut = light.abstract(bound, examples[badIdx].in, []);
-
-                    // console.log("Light Child", light.print(), "=>", lightOut);
-                    if (isError(lightOut) || isBadResult(lightOut)) {
-                        main = light;
-                    }
-                }
-
-                if (main == bestBad.main) {
-                    log(2, "Best main", bestBad);
-                    cc.addConstraint(bestBad);
-                } else {
-                    log(2, "Best main", main.print());
-                    cc.addConstraint(main, bestBad.envt);
-                }
-
-
-                return bestBad;
+                throw bestBad;
             }
             return outputs;
         }
 
-        /**
-         * //We want to replace the bad node identified by badResult and replace it with a new random node.
-         * @param {any} prog
-         * @param {any} badRes
-         */
-        function randomizeLocalizedError(language, prog, badRes, bound) {
-            //console.log(badRes);
-            //console.log(prog.print());
-
-            function makeReplacement(node, idx, replacement) {
-                if (idx === undefined) {
-                    node.body = replacement;
-                } else {
-                    node.args[idx] = replacement;
-                }
-            }
-
-            function replaceRandomChild(prog) {
-                let lidx = Math.floor(Math.random() * prog.args.length);
-                cc.reset();
-                cc.advance(prog);
-                for (let i = 0; i < lidx; ++i) {
-                    cc.advance(prog.args[i]);
-                    cc.goback(prog);
-                }
-                st.trackAction(prog.state, prog);
-                let replacement = randomProgram(undefined, language, bound - 1, [], st.transition(prog.state, prog, lidx));
-                if (replacement instanceof Error) {
-                    console.log("randomizeLocalizedError1 FAILED")
-                    return false;
-                }
-
-                //console.log("Before replacement ", prog.print());
-                prog.args[lidx] = replacement;
-                return true;
-            }
-
-
-            cc.reset();
-            cc.advance(badRes.main);
-            for (let i = 0; i < badRes.child_idx; ++i) {
-                cc.advance(badRes.main.args[i]);
-                cc.goback(badRes.main);
-            }
-            let idx = -1;
-            let newEnvt = badRes.envt.map((x) => { ++idx; return new deBroujin(idx); });
-            st.trackAction(badRes.main.state, badRes.main);
-            let replacement = randomProgram(undefined, language, badRes.level - 1, newEnvt, badRes.envt, st.transition(badRes.main.state, badRes.main, badRes.child_idx));
-            if (replacement instanceof Error) {
-                //Local fix did not work. We need a more global fix. We'll try replacing the parent.
-                cc.reset();
-                if (badRes.parent) {
-                    cc.advance(badRes.parent);
-                    for (let i = 0; i < badRes.parent_idx; ++i) {
-                        cc.advance(badRes.parent.args[i]);
-                        cc.goback(badRes.parent);
-                    }
-                    st.trackAction(badRes.parent.state, badRes.parent);
-                    let replacement2 = randomProgram(undefined, language, badRes.level, newEnvt, badRes.envt, st.transition(badRes.parent.state, badRes.parent, badRes.parent_idx));
-                    if (replacement2 instanceof Error) {
-                        if (prog instanceof FunN) {
-                            for (let i = 0; i < 5; ++i) {
-                                if (replaceRandomChild(prog)) {
-                                    return true;
-                                }
-                            }
-                            return null;
-
-                            //console.log("After replacement ", prog.print());
-                        } else {
-                            console.log("randomizeLocalizedError2 FAILED")
-                            return null;
-                        }
-                    } else {
-                        //console.log("Replacement2 ", replacement2.print());
-                        makeReplacement(badRes.parent, badRes.parent_idx, replacement2);
-                    }
-                } else {
-                    if (prog instanceof FunN) {
-                        for (let i = 0; i < 5; ++i) {
-                            if (replaceRandomChild(prog)) {
-                                return true;
-                            }
-                        }
-                        return null;
-                    }
-                }
-
-
-            } else {
-                //console.log("Replacement ", replacement.print());
-                makeReplacement(badRes.main, badRes.child_idx, replacement);
-            }
-
-        }
-
+        
         function solprint() {
             let sol = this;
             let synthetics = "";
@@ -3046,185 +2583,29 @@
 
 
 
-        function runAndFixB(language, examples, prog, bound, budget, outType) {
-            let bestSolution = undefined;
-            let bestOutput = undefined;
-            let bestScore = 100000;//score is an error, so bigger is worse.
-            let out = runOrLocalize(examples, prog, bound);
-            function solprint() {
-                let sol = this;
-                 return sol.prog.print() + " : " + sol.status + " : " +  sol.budget + " crashing:" + sol.crashing;
-
-            }
-            let crashing = 0;
-            while (budget > 0) {
-                if (isBadResult(out)) {
-                    ++crashing;
-                    st.scoreTree(prog, -100);
-                    //In this case, an error was localized to an AST node.
-                    //Always re-randomize the AST node with the error.                
-                    log(1, budget + " Bad candidate          ", ()=>prog.print());
-                    randomizeLocalizedError(language, prog, out, bound);//in-place mutation of prog.
-                    log(2, budget + " Rerandomized candidate:", ()=>prog.print());
-                    //Could it ever modify bestProg? no, because bestProg works, and this only runs if prog doesn't work.
-                    --budget;
-                    out = runOrLocalize(examples, prog, bound);
-
-                } else {
-                    let score = scoreOutputs(examples, out)
-                    st.scoreTree(prog, (1 - score) * 100);
-                    log(1, budget + " Score:", score, ()=>prog.print());
-                    if (score < threshold) {
-                        //All outputs correct enough, we are done!
-                        //return an object with the program, the status, the score, and the budget. 
-                        //it also has a print function that returns a string representation of the object.
-                        return { prog: prog, status: "CORRECT", score: score, budget: budget, crashing:crashing, print:solprint };
-                    } else {
-                        cc.addConstraint(ROOT.temp(prog), [], 10);
-                        if (score < bestScore || (score == bestScore && Math.random() > 0.75)) {
-                            //If we are better than the best score, we don't want to lose this solution.
-                            bestScore = score;
-                            bestSolution = prog;
-                            bestOutput = out;
-                            log(1, "New best solution", score, bestSolution.print());
-                        }
-                        log(2, "Before randomization", ()=>prog.print());
-                        let newprog = randomizeClone(language, prog, bound);
-                        log(2, "After randomization", ()=>newprog.print());
-                        --budget;
-                        out = runOrLocalize(examples, newprog, bound);
-                        if (isBadResult(out)) {
-                            st.scoreTree(newprog, -100);
-                            prog = newprog;//make prog now equal the new prog and go back to the start of the loop.
-                        } else {
-                            //
-                            let newscore = scoreOutputs(examples, out);
-                            st.scoreTree(newprog, (1 - newscore) * 100);
-                            if (newscore <= score) {
-                                //At least we made an improvement; make prog = newprog and keep improving.
-                                log(2, "New candidate", score, ()=>newprog.print());
-                                prog = newprog;
-                            } else {
-                                prog = bestSolution; //could bestSolution be undefined? No.  
-                                out = bestOutput;
-                            }
-                        }
-                    }
-                }
-            }
-            return { prog: bestSolution, status: "INCORRECT", score: bestScore, budget: 0, crashing: crashing, print:solprint };            
-        }
-
 
         let randomizeClone;
-
-        /**
-         * Recursively traverse the AST of prog and with some probability replace a node with a new random node.
-         * @param {any} language
-         * @param {any} prog
-         * @param {any} bound
-         * @returns
-         */
-        function simpleRandClone(language, prog, bound) {
-            //The problem with this function is that it prioritizes mutations to early arguments. 
-            let probBound = Math.pow(1.5, -bound);
-            cc.reset();
-            function traverse(node, lbound, envt, expectedType) {
-                if (Math.random() > probBound) {
-                    cc.advance(node);
-                    if (node instanceof FunN) {
-                        let changed = false;                        
-                        let newargs = node.args.map((arg) => {
-                            if (changed) {
-                                cc.advance(arg);
-                                cc.goback(node);
-                                return arg;
-                            } else {
-                                let rv = traverse(arg, lbound - 1, envt, arg.type);
-                                cc.goback(node);
-                                if (rv != arg) {
-                                    changed = true;
-                                }
-                                return rv;
-                            }                            
-                        });
-                        if (changed) {
-                            let rv;
-                            if (node.isParametric()) {
-                                rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
-                            } else {
-                                rv = (new FunN(node.name, node.imp, node.absfun, newargs));
-                            }                            
-                            if (newargs.length == 0) {
-                                rv.childstate = st.transition(node.state, rv, 0);
-                            }
-                            rv.type = expectedType;
-                            rv.setDepth();
-                            return rv.setState(node.state);
-
-                        } else {
-                            return node;
-                        }
-                    }
-                    if (node instanceof LambdaN) {
-                        let idx = envt.length;
-                        let newenvt = envt.map((dbi, i) => new deBroujin(idx - i, dbi.type, dbi.pos));
-                        let argtype = node.type ? node.type.from : undefined;
-                        newenvt.push(new deBroujin(0, argtype, language.length+envt.length));
-                        let newbody = traverse(node.body, lbound - 1, newenvt, node.body.type);
-                        cc.goback(node);
-                        if (newbody != node.body) {
-                            let rv = (new LambdaN(newbody)).setState(node.state);
-                            rv.type = expectedType;
-                            rv.setDepth();
-                            return rv;
-                        } else {
-                            return node;
-                        }
-                    }
-                    return node;
-                } else {
-                    let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
-                    if (rv instanceof Error) {
-                        cc.advance(node);
-                        return node;
-                    }
-                    if (rv.equals(node)) {
-                        return node;
-                    }
-                    return rv;
-                }
-            }
-            let rv = traverse(prog, bound, []);
-            while (rv == prog) {
-                probBound = probBound * 1.5;
-                rv = traverse(prog, bound, []);
-            }
-            return rv;
-        }
 
 
         function fancyRandClone(language, prog, bound) {
             //like simple clone, but doesn't prioritize early arguments.
             let probBound = Math.pow(1.5, -bound);
-            cc.reset();
+            
             function traverse(node, lbound, envt, expectedType) {
                 if (Math.random() > probBound) {
-                    cc.advance(node);
+            
                     if (node instanceof FunN) {
                         let changed = false;
                         let choice = Math.floor(Math.random() * node.args.length);
                         let newargs = node.args.map((arg, idx) => {
                             if (idx === choice) {
                                 let rv = traverse(arg, lbound - 1, envt, arg.type);
-                                cc.goback(node);
+            
                                 if (rv != arg) {
                                     changed = true;
                                 }
                                 return rv;                                
-                            } else {
-                                cc.advance(arg);
-                                cc.goback(node);
+                            } else {            
                                 return arg;
                             }
                         });
@@ -3244,9 +2625,9 @@
 
                         } else {
                             //If the argument didn't change, I am going to give it a chance to rewrite this node.
-                            let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
+                            let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound);
                             if (rv instanceof Error) {
-                                cc.advance(node);
+                                
                                 return node;
                             }
                             if (rv.equals(node)) {
@@ -3261,7 +2642,7 @@
                         let argtype = node.type ? node.type.from : undefined;
                         newenvt.push(new deBroujin(0, argtype, language.length + envt.length));
                         let newbody = traverse(node.body, lbound - 1, newenvt, node.body.type);
-                        cc.goback(node);
+                        
                         if (newbody != node.body) {
                             let rv = (new LambdaN(newbody)).setState(node.state);
                             rv.type = expectedType;
@@ -3286,9 +2667,9 @@
 
                     return node;
                 } else {
-                    let rv = randomProgram(expectedType, language, lbound, envt, undefined, node.state, lbound);
+                    let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound);
                     if (rv instanceof Error) {
-                        cc.advance(node);
+                        
                         return node;
                     }
                     if (rv.equals(node)) {
@@ -3349,7 +2730,7 @@
         let langWithInputs = processLanguage(language, inputspec);
         
 
-        randomizeClone = fancyRandClone; // simpleRandClone
+        randomizeClone = fancyRandClone; 
 
         let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;  // //
 
