@@ -1925,18 +1925,15 @@
                     el = extras.length;
                     if (scores.length < language.length + el) {
                         scores = this.succScores(state, language, extras);
-                        total = scores[1];
+                        total = scores[scores.length-1];
                         if (total == 0) {
                             return uniform();
-                        }
-                        scores = scores[0];
+                        }                        
                         this.policyCache[pckey] = { scores: scores, total: total };
                     }                        
                 }
                 if (scores.length > language.length + el) {
-                    for (let i = language.length + el; i < scores.length; ++i) {
-                        total -= scores[i];
-                    }
+                    total = scores[language.length + el-1];                    
                 }
             } else {
                 let tstate;
@@ -1947,30 +1944,26 @@
                     return uniform();
                 }
                 scores = this.succScores(state, language, extras);
-                total = scores[1];
+                total = scores[scores.length - 1];
                 if (total == 0) {
                     return uniform();
-                }
-                scores = scores[0];
+                }                
                 this.policyCache[pckey] = { scores: scores, total: total };
             }
 
-            let rnd = Math.random();
-            let tally = 0;
+            let rnd = Math.random()*total;            
             let i = 0;
-            for (i = 0; i < language.length; ++i) {
-                tally += scores[i];
-                if (tally / total > rnd) {
+            for (i = 0; i < language.length; ++i) {                
+                if (scores[i] > rnd) {
                     return language[i];
                 }
             }
             if (extras) {
-                for (let j = 0; j < extras.length; ++j) {
-                    tally += scores[i];
-                    ++i;
-                    if (tally / total > rnd) {
+                for (let j = 0; j < extras.length; ++j) {                                        
+                    if (scores[i] > rnd) {
                         return extras[j];
                     }
+                    ++i;
                 }
             }
             console.log("WTF!!!!");
@@ -1994,12 +1987,12 @@
                 let tstate = this.tracker[key];
                 
                 if (tstate) {
-                    totreward += rescale(tstate.reward);
+                    totreward = rescale(tstate.reward);
                 } else {
-                    totreward += zeroR;
+                    totreward = zeroR;
                 }               
                 total += totreward;
-                rv.push(totreward);
+                rv.push(total);
             }
             if (extras) {
                 for (let i = 0; i < extras.length; ++i) {
@@ -2008,15 +2001,15 @@
                     let tstate = this.tracker[key];
                     let totreward = 0;
                     if (tstate) {
-                        totreward += rescale(tstate.reward);
+                        totreward = rescale(tstate.reward);
                     }else {
-                        totreward += zeroR;
+                        totreward = zeroR;
                     } 
                     total += totreward;
-                    rv.push(totreward);
+                    rv.push(total);
                 }
             }            
-            return [rv, total];
+            return rv;
 
         }
 
