@@ -3393,17 +3393,72 @@
         return output / outputs.length;
     }
 
+    function numscore(examples, outputs) {
+        //This is meant for arrays of arrays of numbers. The distance doesn't just capture the numerical
+        //distance; it also captures whether they change in ways that are correlated. 
+        //We expect the type checker will rule out type mismatches, so we don't have to worry about those. 
+        let flatExamples = [];
+        let flatOutput = [];
+        function singleOutput(example, output) {
+            if (typeof (example) != typeof (output)) {
+                flatExamples.push('x');
+                flatOutput.push('x');
+                return;
+            }
+            if (example instanceof Array && output instanceof Array) {
+                let minidx = Math.min(example.length, output.length);
+                let maxidx = Math.max(example.length, output.length);
+                let totdist = 0;
+                for (let i = 0; i < minidx; ++i) {
+                    singleOutput(example[i], output[i]);                    
+                }
+                let dif = (maxidx - minidx);
+                for (let i = 0; i < dif; ++i) {
+                    flatExamples.push('x');
+                    flatOutput.push('x');
+                }
+                return;
+            }
+            flatExamples.push(example);
+            flatOutput.push(output);
+        }
 
+        for (let idx in outputs) {
+            singleOutput(examples[idx].out, outputs[idx]);
+        }
+        let len = flatExamples.length;
+        let hamming = 0;
+        let deriv = 0;
+        for (let i = 0; i < len; ++i) {
+            if (flatExamples[i] == 'x' || flatExamples[i] != flatOutput[i]) {
+                hamming++;
+            }
+            if (i > 0) {
+                let curE = flatExamples[i];
+                let curO = flatOutput[i];
+                let prevE = flatExamples[i - 1];
+                let prevO = flatOutput[i - 1];
+                if(curE=='x' || prevE=='x') {
+                    continue;
+                }
+                if (Math.sign(curE - prevE) != Math.sign(curO - prevO)) {
+                    deriv++;
+                }
+            }
+        }
+        return 0.8*hamming/len + 0.2*deriv/(len-1);
+
+    }
 
 
 
     // Export for Node.js (CommonJS)
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, Tp };
+        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp };
     }
     // Export for browsers (ES6 Modules)
     else if (typeof exports === 'undefined') {
-        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, Tp };
+        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp };
     }
 
 })();

@@ -13,6 +13,7 @@ if (typeof module !== 'undefined' && module.exports) {
     isHole = synlib.isHole;
     makeHole = synlib.makeHole;
     score = synlib.score;
+    numscore = synlib.numscore;
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
@@ -24,6 +25,7 @@ else if (typeof exports === 'undefined') {
     isHole = synlib.isHole;
     makeHole = synlib.makeHole;
     score = synlib.score;
+    numscore = synlib.numscore;
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
@@ -313,7 +315,7 @@ let problems = {
 function runOne(p, verbose) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
-    let sol = synthesize(problem.intypes, problem.io, maplanguage, score, 0.001, problem.depth, 100000);
+    let sol = synthesize(problem.intypes, problem.io, maplanguage, numscore, 0.001, problem.depth, 100000);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
@@ -344,7 +346,7 @@ function runAll(verbose) {
 function runB() {
     let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
     { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, score, 0.001, 3, 1000);
+    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, numscore, 0.001, 3, 1000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
@@ -358,7 +360,7 @@ function run() {
     let examples = [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
         { in: { x: [7, 0, 0] }, out: 7 }];
-    let sol = synthesize([{ kind: "input", name: "x", type:Tp("list[int]") }], examples, maplanguage, score, 0.001, 5, 10000);
+    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, numscore, 0.001, 5, 10000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
