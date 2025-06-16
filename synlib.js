@@ -362,18 +362,19 @@
         checkpoint() {
             //return a clone of the constraints object
             //return Object.assign({}, this.constraints);
-            let rv = {};
+            let rv = [];
             let tc = this.constraints;
             for (let key in tc) {
-                rv[key] = tc[key];
+                rv.push([key, tc[key]]);
             }
             return rv;
         }
         revert(checkpoint) {
             //this.constraints = Object.assign({}, checkpoint);
             let tc = {};
-            for (let key in checkpoint) {
-                tc[key] = checkpoint[key];
+            for (let i = 0; i < checkpoint.length; ++i) {
+                let ent = checkpoint[i];
+                tc[ent[0]] = ent[1];
             }
             this.constraints = tc;
         }
@@ -441,8 +442,9 @@
 
 
         constraint(ta, tb) {
-            if (ta in this.constraints) {
-                let alt = this.localConvert(this.constraints[ta]);                
+            let taconv = this.constraints[ta];
+            if (taconv) {
+                let alt = this.localConvert(taconv);                
                 if (alt instanceof TypeVar) {                    
                     if (!(tb instanceof TypeVar)) {
                         //We need to check if the parametric doesn't contain alt internally, because then it wouldn't be compatible.
@@ -513,12 +515,14 @@
                     }
                     // We  want to pick one to be the primary, so that the secondary just gets replaced by the primary.
                     //The goal is to avoid cycles.
-                    if (tas in this.constraints) {
-                        if (tbs in this.constraints) {
+                    let taconv = this.constraints[tas];
+                    if (taconv) {
+                        let tbconv = this.constraints[tbs];
+                        if (tbconv) {
                             //Both already have constraints. We need to check if they are compatible.
                             //If they are not, then we are done and return false.
-                            let converted = this.localConvert(this.constraints[tbs]);
-                            let rv = this.unify(this.constraints[tas], converted);
+                            let converted = this.localConvert(tbconv);
+                            let rv = this.unify(taconv, converted);
                             if (!rv) {
                                 return false;
                             }
@@ -526,12 +530,13 @@
                             return this.constraint(tas, converted);
                         } else {
                             //Easy, ta has constraints, tb does not. We just point tb to ta.
-                            return this.constraint(tbs, this.localConvert(this.constraints[tas]));
+                            return this.constraint(tbs, this.localConvert(taconv));
                         }
                     } else {
-                        if (tbs in this.constraints) {
+                        let tbconv = this.constraints[tbs];
+                        if (tbconv) {
                             //Easy, tb has constraints, ta does not. We just point ta to tb.
-                            return this.constraint(tas, this.localConvert(this.constraints[tbs]));
+                            return this.constraint(tas, this.localConvert(tbconv));
                         } else {
                             //None of them has constraints, we just point one to the other.
                             return this.constraint(tas, tb);
