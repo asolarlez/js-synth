@@ -1055,6 +1055,25 @@
         }
     }
 
+    class Plug extends AST {
+            constructor() {
+                super("plug");
+                this.depth = 0;
+                this.size = 0;
+            }
+            setDepth() {
+                this.depth = 0;
+                this.size = 0; // holes don't count for size purposes.
+                return this;
+            }
+            print() {
+                return "#";
+            }
+            accept(visitor) {
+                return visitor.visitPlug(this);
+            }
+    }
+
     class ASTVisitor {
         visitHole(hole) { return hole; }
         visitFun(fun) {
@@ -1129,50 +1148,89 @@
 
 
     const HOLE = new Hole();
-    function getLabel(node, stage) {
-        let kind = node.kind;
-        if (kind == "fun") {
-            kind = kind + "/" + node.name;
+    
+
+            //Visitor to construct a function out of result.component;
+    class GenerateCompImplementation extends ASTVisitor {
+        /**
+            * The high-level idea of this class is as follows. The goal is to take an AST of the program and turn it into a function 
+            * that can be used as the implementation of a function node in language. 
+            * this.args is the total number of arguments in the function, and there is an extra argument containing the global parameters.
+            * As an example, suppose that we have a component of the form: 
+            *  foo(input("x"), int(42), \lambda plus(plug(0), $0)))
+            * Then, this will be translated into 
+            *  newfun(arg0, gps){
+            *   ((arg0, gps)=>{
+            *      return foo(((arg0, gps)=> gps['x'] )(arg0,gps), 
+            *                 ((arg0, gps)=> 42)(arg0,gps), 
+            *                 ((arg0a, gpsa)=> ( ($0)=>(  
+            *                                          ((arg0b, gpsb, $0)=>{return plus( ((arg0c,gpsc,$0c)=> arg0c)(arg0b, gpsb,$0), ((arg0c,gpsc,$0c)=> $0c)(arg0b, gpsb,$0)  ) })(arg0a, gpsa, $0)
+            *                                          )   )(arg0, gps) )
+            *   })(arg0, gps)
+            * }
+            * 
+            * @param {any} component
+            */
+        constructor(component) {
+            super();
+            this.args = 0;
+            let _this = this;
+            this.imp = undefined;
+                
+            component.traverse((node) => {
+                if (node.kind == 'plug') { node.argpos = _this.args; _this.args++; }
+            });
+        }   
+        visitFun(fun) {
+            const imp = fun.imp;
+            const lazyArgs = fun.args.map((arg) => arg.accept(this));
+            return (args) => { 
+                let finalArgs = lazyArgs.map((f) => f(args));
+                finalArgs.push(args[args.length - 1]); // Add the global parameters as the last argument.
+                return imp.apply(null, finalArgs);  
+            }
         }
-        if (kind == "input") {
-            kind = kind + "/" + node.name;
+        visitpFun(pfun) {
+            return this.visitFun(pfun);
         }
-        if (stage != undefined) {
-            kind += "/" + stage;
+        visitLambda(lambda) {
+            const body = lambda.body.accept(this);
+            return (args) => {
+                return (lambdaarg) => {
+                    let newargs = args.slice(0, args.length - 1);
+                    newargs.push(lambdaarg);
+                    newargs.push(args[args.length - 1]);
+                    return body(newargs);
+                }
+            };
         }
-        return kind;
+        visitInput(input) {                
+            const name = input.name;
+            return (args) => args[args.length-1][name];                    
+        }
+        visitIndex(index) {
+            const idx = index.idx;
+            return (args) =>  args[args.length-2 - idx];
+        }
+        visitHole(hole) { throw "Should not be any holes at this point!"; }
+        visitPlug(plug) {
+            const idx = plug.argpos;
+            return (args) => {
+                if (args.length <= idx) {
+                    throw "Not enough arguments provided to plug!";
+                }
+                return args[idx];
+            };
+        }
+        visitInt(intn) {
+            const n = intn.val;
+            return (args) => n;
+        }
     }
-
-    function stateToStr(state) {
-        return state.depth + ":" + state.grandpa + ":" + state.parentIdx + ":" + state.parent;
-    }
-
-    function nextStateToStr(state, node) {
-        return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node) ;
-    }
-
-
 
 
     function stitch(programs, language) {
-        class Plug extends AST {
-            constructor() {
-                super("plug");
-                this.depth = 0;
-                this.size = 0;
-            }
-            setDepth() {
-                this.depth = 0;
-                this.size = 0; // holes don't count for size purposes.
-                return this;
-            }
-            print() {
-                return "#";
-            }
-            accept(visitor) {
-                return visitor.visitPlug(this);
-            }
-        }
+        
         function growCandidate(candidate) {
             let tmpPrograms = candidate.instances.slice(0);
             //After calling thre grow visitor, the newInstancesIdx index maps each label to an outId that is an index inside newProgs returned 
@@ -1565,83 +1623,7 @@
             }
             return rv;
         }
-        //Visitor to construct a function out of result.component;
-        class ComponentVisitor extends ASTVisitor {
-            /**
-             * The high-level idea of this class is as follows. The goal is to take an AST of the program and turn it into a function 
-             * that can be used as the implementation of a function node in language. 
-             * this.args is the total number of arguments in the function, and there is an extra argument containing the global parameters.
-             * As an example, suppose that we have a component of the form: 
-             *  foo(input("x"), int(42), \lambda plus(plug(0), $0)))
-             * Then, this will be translated into 
-             *  newfun(arg0, gps){
-             *   ((arg0, gps)=>{
-             *      return foo(((arg0, gps)=> gps['x'] )(arg0,gps), 
-             *                 ((arg0, gps)=> 42)(arg0,gps), 
-             *                 ((arg0a, gpsa)=> ( ($0)=>(  
-             *                                          ((arg0b, gpsb, $0)=>{return plus( ((arg0c,gpsc,$0c)=> arg0c)(arg0b, gpsb,$0), ((arg0c,gpsc,$0c)=> $0c)(arg0b, gpsb,$0)  ) })(arg0a, gpsa, $0)
-             *                                          )   )(arg0, gps) )
-             *   })(arg0, gps)
-             * }
-             * 
-             * @param {any} component
-             */
-            constructor(component) {
-                super();
-                this.args = 0;
-                let _this = this;
-                this.imp = undefined;
-                
-                component.traverse((node) => {
-                    if (node.kind == 'plug') { node.argpos = _this.args; _this.args++; }
-                });
-            }   
-            visitFun(fun) {
-                const imp = fun.imp;
-                const lazyArgs = fun.args.map((arg) => arg.accept(this));
-                return (args) => { 
-                    let finalArgs = lazyArgs.map((f) => f(args));
-                    finalArgs.push(args[args.length - 1]); // Add the global parameters as the last argument.
-                    return imp.apply(null, finalArgs);  
-                }
-            }
-            visitpFun(pfun) {
-                return this.visitFun(pfun);
-            }
-            visitLambda(lambda) {
-                const body = lambda.body.accept(this);
-                return (args) => {
-                    return (lambdaarg) => {
-                        let newargs = args.slice(0, args.length - 1);
-                        newargs.push(lambdaarg);
-                        newargs.push(args[args.length - 1]);
-                        return body(newargs);
-                    }
-                };
-            }
-            visitInput(input) {                
-                const name = input.name;
-                return (args) => args[args.length-1][name];                    
-            }
-            visitIndex(index) {
-                const idx = index.idx;
-                return (args) =>  args[args.length-2 - idx];
-            }
-            visitHole(hole) { throw "Should not be any holes at this point!"; }
-            visitPlug(plug) {
-                const idx = plug.argpos;
-                return (args) => {
-                    if (args.length <= idx) {
-                        throw "Not enough arguments provided to plug!";
-                    }
-                    return args[idx];
-                };
-            }
-            visitInt(intn) {
-                const n = intn.val;
-                return (args) => n;
-            }
-        }
+
         class ComponentReplacer extends ASTVisitor {
             /**
              * This class will search for instances of the component in the AST and replace them with the corresponding function call.
@@ -1795,7 +1777,7 @@
             });
             return prog;
         }
-        let visitor = new ComponentVisitor(result.construct);
+        let visitor = new GenerateCompImplementation(result.construct);
         let imp = result.construct.accept(visitor);
         let name = "__foo" + language.length;
         function myImp() {
@@ -1822,6 +1804,27 @@
         return workList;
     }
 
+    function getLabel(node, stage) {
+        let kind = node.kind;
+        if (kind == "fun") {
+            kind = kind + "/" + node.name;
+        }
+        if (kind == "input") {
+            kind = kind + "/" + node.name;
+        }
+        if (stage != undefined) {
+            kind += "/" + stage;
+        }
+        return kind;
+    }
+
+    function stateToStr(state) {
+        return state.depth + ":" + state.grandpa + ":" + state.parentIdx + ":" + state.parent;
+    }
+
+    function nextStateToStr(state, node) {
+        return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node);
+    }
 
     class StatsTracker {
         constructor() {
@@ -2035,13 +2038,86 @@
 
 
 
+    class SynthesizerState {
+        constructor(beamsize) {
+            this.workList = new Array(beamsize);
+            this.beamsize = beamsize;
+            this.bestProgram = undefined;
+            this.bestScore = 100000;
+            this.cost = 0;
+        }
+        populate(gen) {
+            for (let i = 0; i < this.beamsize; ++i) {
+                let rv = gen(i);
+                this.workList[i] = rv;
+                if (rv.score < this.bestScore) {
+                    this.bestScore = rv.score;
+                    this.bestProgram = rv.prog;
+                }
+            }
+        }
+        sortWorklist() {
+            this.workList.sort((a, b) => a.score - b.score);
+        }
+        forEach(f) {
+            this.workList.forEach(f);
+        }
+        setWorkList(newWorkList) {
+            this.workList = newWorkList;
+        }
+        incrementCost(inc) {
+            this.cost += inc;
+            return this.cost;
+        }
+        updateBest(score, prog) {
+            if (score < this.bestScore) {
+                this.bestScore = score;
+                this.bestProgram = prog;
+            }
+        }
+        randomIndex() {
+            return Math.floor(Math.random() * this.beamsize);
+        }
+        highScore() {
+            return this.workList[0].score;
+        }
+        lowScore() {
+            return this.workList[this.beamsize - 1].score
+        }
+        replaceWorst(adjusted, score) {
+            let beamsize = this.beamsize;
+            for (let i = 0; i < beamsize; ++i) {
+                if (this.workList[i].score == this.workList[beamsize - 1].score) { // reached the first worst one.
+                    // If i == beamsize - 1, we are replacing the last one in the list.
+                    //otherwise, we pick one at random between i and beamsize - 1.
+                    if (i == beamsize - 1) {
+                        this.workList[i] = { prog: adjusted, score: score };
+                    } else {
+                        //pick one at random between i and beamsize - 1.
+                        let idx = Math.floor(Math.random() * (beamsize - i)) + i;
+                        this.workList[idx] = { prog: adjusted, score: score };
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
 
-
-    function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N) {
+    function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N, config) {
         
         let st = new StatsTracker();
         let tc = new TypeChecker();
+
+        
+        if (!config) {
+            config = {};
+        }
+        
+        config.solver = config.solver || "hillclimb";
+        
+
+
         function randomProgram(expectedType, language, bound, extras, state, initialBound) {
             if (initialBound == undefined) {
                 initialBound = bound;
@@ -2273,33 +2349,43 @@
         }
 
 
-        function smcSynth(language, examples, bound, budget, outType) {
-            let beamsize = 20;
+        function smcSynth(language, examples, bound, budget, outType, state) {
+            
             let out; 
             const initBudget = budget;
-            let score; 
-            let workList = [];
-            let bestProgram;
-            let bestScore = 100000;
+            
             let totalScore = 0;
+
+            function testProg(prog) {
+
+                let out = runOrLocalize(examples, prog, bound);
+                if (isBadResult(out)) {
+                    console.log(prog.print());
+                    throw "Should never happen";
+                }
+                let score = scoreOutputs(examples, out);
+                st.scoreTree(prog, (1 - score) * 100);
+                return score;
+            }
+
             function mass(score) {
                 return Math.exp(-3 * score);
             }
-            for (let i = 0; i < beamsize; ++i) {               
-                tc.reset();
-                let newprog = randomProgram(outType, language, bound);
-                out = runOrLocalize(examples, newprog, bound);
-                score = scoreOutputs(examples, out);
-                st.scoreTree(newprog, (1 - score) * 100);
-                workList.push({ prog: newprog, score: score });
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestProgram = newprog;
-                }
-                totalScore += mass(score);
+            if (!state) {
+                state = new SynthesizerState(config.beamsize || 20);
+                state.populate((i) => {
+                    tc.reset();
+                    let newprog = randomProgram(outType, language, bound);
+                    score = testProg(newprog);                                                         
+                    totalScore += mass(score);
+                    return { prog: newprog, score: score };   
+                });
+                budget -= beamsize;
             }
-            budget -= beamsize;
-            workList.sort((a, b) => a.score - b.score);
+
+            
+            state.sortWorklist();
+
             let lastCacheReset = budget;
             while (budget > 0) {     
                 if (lastCacheReset - budget > 100) {
@@ -2307,17 +2393,17 @@
                     lastCacheReset = budget;
                 }
                 let candidates = [];
-                for (let idx in workList) {
-                    let c = workList[idx];
+                state.forEach((c) => {
                     let n = Math.ceil((beamsize * mass(c.score)) / totalScore)
                     for (let i = 0; i < n; ++i) {
                         if (candidates.length < beamsize) {
                             candidates.push(c);
-                        }                        
+                        }
                     }
-                }
+                });
+
                 totalScore = 0;
-                workList = candidates.map((entry) => {
+                state.setWorkList( candidates.map((entry) => {
                     tc.reset();
                     let adjusted; 
                     if (Math.random() > 0.1) {
@@ -2331,31 +2417,36 @@
                         console.log("randomAndHillClimb1 FAILED")
                         return adjusted;
                     }
-                    out = runOrLocalize(examples, adjusted, bound);
-                    score = scoreOutputs(examples, out);
-                    st.scoreTree(adjusted, (1 - score) * 100);
+                    score = testProg(adjusted);                    
                     totalScore += mass(score);
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestProgram = adjusted;
-                    }
+                    state.updateBest(score, adjusted);
+                    
                     return { prog: adjusted, score: score };
-                });
+                }));
                 
                 
-                if (bestScore < threshold) {
+                if (state.bestScore < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
                     //it also has a print function that returns a string representation of the object.
-                    return { prog: bestProgram, status: "CORRECT", score: bestScore, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+                    return {
+                        prog: state.bestProgram, status: "CORRECT", score: state.bestScore, cost: state.incrementCost(initBudget - budget),
+                        state:state,
+                        initBudget: initBudget, crashing: 0, print: solprint
+                    };
                 }
-                workList.sort((a, b) => a.score - b.score);
+                state.sortWorklist();
+                
 
                 //let disp = workList.reduce((acc, b) => acc + "" + b.score + ",", "");
                 //console.log(disp);
 
             }
-            return { prog: bestProgram, status: "INCORRECT", score: bestScore, cost: initBudget - budget, initBudget: initBudget, crashing: 0, print: solprint };
+            return {
+                prog: bestProgram, status: "INCORRECT", score: bestScore, cost: state.incrementCost(initBudget - budget),
+                state:state,
+                initBudget: initBudget, crashing: 0, print: solprint
+            };
 
 
         }
@@ -2374,46 +2465,15 @@
          * @param {any} bound
          * @param {any} budget
          */
-        function randomAndHillClimb(language, examples, bound, budget, outType) {
-            let beamsize = 10;
-            let out ;
+        function randomAndHillClimb(language, examples, bound, budget, outType, state) {
+            
+            
             const initBudget = budget;
             let rejuvenate = 0;
             let compStep = 10000;
-
-            let score; 
-            let workList = [];
-            for (let i = 0; i < beamsize; ++i) {
-                tc.reset();
-                let newprog = randomProgram(outType, language, bound);
-                out = runOrLocalize(examples, newprog, bound);
-                score = scoreOutputs(examples, out);
-                st.scoreTree(newprog, (1 - score) * 100);
-                workList.push({ prog: newprog, score: score });
-            }
-            budget -= beamsize;
-            // sort so that the lowest score is workList[0]
-            workList.sort((a, b) => a.score - b.score); 
-
-            function replaceWorst(adjusted, score) {
-                for (let i = 0; i < beamsize; ++i) {
-                    if (workList[i].score == workList[beamsize - 1].score) { // reached the first worst one.
-                        // If i == beamsize - 1, we are replacing the last one in the list.
-                        //otherwise, we pick one at random between i and beamsize - 1.
-                        if (i == beamsize - 1) {
-                            workList[i] = { prog: adjusted, score: score };
-                        } else {
-                            //pick one at random between i and beamsize - 1.
-                            let idx = Math.floor(Math.random() * (beamsize - i)) + i;
-                            workList[idx] = { prog: adjusted, score: score };
-                        }
-                        break;
-                    }
-                }
-            }
             function testProg(prog) {
 
-               let out = runOrLocalize(examples, prog, bound);
+                let out = runOrLocalize(examples, prog, bound);
                 if (isBadResult(out)) {
                     console.log(prog.print());
                     throw "Should never happen";
@@ -2423,10 +2483,31 @@
                 return score;
             }
 
+            let score; 
+            if (!state) {
+                state = new SynthesizerState(config.beamsize || 10);
+                state.populate((i) => {
+                    tc.reset();
+                    let newprog = randomProgram(outType, language, bound);
+                    score = testProg(newprog);
+                    return { prog: newprog, score: score };                   
+                });
+                budget -= state.beamsize;
+            }
+
+            
+            
+            
+            // sort so that the lowest score is workList[0]
+            state.sortWorklist();
+            
+            
+            
+
             let rejubudget = 300;
             let lastCacheReset = budget;
-            let highScore = workList[0].score;
-            let lowScore = workList[beamsize - 1].score;
+            let highScore = state.highScore();
+            let lowScore = state.lowScore();
             let lastHighLowChange = budget;
 
             while (budget > 0) {
@@ -2435,14 +2516,14 @@
                     st.resetPolicyCache();
                     lastCacheReset = budget;
                 }
-                if(highScore != workList[0].score || lowScore != workList[beamsize - 1].score) {
+                if(highScore != state.highScore() || lowScore != state.lowScore()) {
                     lastHighLowChange = budget;
-                    highScore = workList[0].score;
-                    lowScore = workList[beamsize - 1].score;
+                    highScore = state.highScore();
+                    lowScore = state.lowScore();
                 }
-                if(false && budget < lastHighLowChange - compStep) {
+                if(budget < lastHighLowChange - compStep) {
                     //high and low scores have not changed in a while, so let's create some components and see what happens.
-                    workList = componentize(workList, language, st); //commenting out componentization for now.
+                    state.setWorkList(componentize(state.workList, language, st));                    
                     console.log(budget, ": Componentized");
                     lastHighLowChange = budget;
                     compStep = compStep * 2;
@@ -2462,25 +2543,25 @@
                     log(3, "After mod ", ()=>adjusted.print(), "score", score);
                     //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
                     //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
-                    if (score < 1 && (score <= workList[beamsize - 1].score)) { //  || Math.random() < 0.1 
-                        replaceWorst(adjusted, score);                                                
+                    if (score < 1 && (score <= state.lowScore())) { //  || Math.random() < 0.1 
+                        state.replaceWorst(adjusted, score);                                                
                     }
                 } else {
                     //We don't replace, we improve.
-                    let idx = Math.floor(Math.random() * beamsize);
-                    let prog = workList[idx].prog;
+                    let idx = state.randomIndex();
+                    let prog = state.workList[idx].prog;
                     log(3, () => "original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
 
-                    let adjusted = randomizeClone(language, workList[idx].prog, bound);
+                    let adjusted = randomizeClone(language, state.workList[idx].prog, bound);
                     if (adjusted instanceof Error) {
                         console.log("randomAndHillClimb1 FAILED")
                         return;
                     }
                     score = testProg(adjusted);                    
                     log(3, "After mod ", ()=>adjusted.print(), "score", score);
-                    if (score < workList[idx].score) {// good. The new program is better than the old one. replace
-                        workList[idx] = { prog: adjusted, score: score };
-                    } else if (score < workList[beamsize - 1].score) {
+                    if (score < state.workList[idx].score) {// good. The new program is better than the old one. replace
+                        state.workList[idx] = { prog: adjusted, score: score };
+                    } else if (score < state.lowScore() ) {
                         if (Math.random() < 0.05) {
                          //   workList[beamsize - 1] = { prog: adjusted, score: score };
                         }
@@ -2494,40 +2575,42 @@
                     return ent.score * 100 + ent.prog.depth;
                 }
                
-                workList.sort((a, b) => quant(a) - quant(b));                 
-                if (workList[0].score < threshold) {
+                state.workList.sort((a, b) => quant(a) - quant(b));                 
+                if (state.highScore() < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget.
                     //it also has a print function that returns a string representation of the object.
                     let synthetic = language.filter((elem) => elem.synthetic);
                     return {
-                        prog: workList[0].prog, status: "CORRECT", score: workList[0].score, cost: initBudget - budget,
-                        synthetic:synthetic,
+                        prog: state.workList[0].prog, status: "CORRECT", score: state.workList[0].score, cost: state.incrementCost(initBudget - budget),
+                        state:state,
+                        synthetic: synthetic,
                         initBudget: initBudget, crashing: 0, print: solprint
                     };
                 }
                 if (budget == rejuvenate) {                    
-                    for (let i = beamsize / 2; i < beamsize; ++i) {
+                    for (let i = state.beamsize / 2; i < state.beamsize; ++i) {
                         let adjusted = randomProgram(outType, language, bound);
                         if (adjusted instanceof Error) {
                             console.log("randomAndHillClimb1 FAILED")
                             return;
                         }
                         score = testProg(adjusted);
-                        workList[i] = { prog: adjusted, score: score };
+                        state.workList[i] = { prog: adjusted, score: score };
                     }
-                    workList.sort((a, b) => quant(a) - quant(b));   
+                    state.workList.sort((a, b) => quant(a) - quant(b));   
                     rejuvenate = 0;
                     rejubudget = rejubudget * 1.5;
                 }
-                if (workList[0].score< 1 && workList[0].score == workList[beamsize - 1].score && rejuvenate < 1) {
+                if (state.highScore() < 1 && state.highScore() == state.lowScore() && rejuvenate < 1) {
                     rejuvenate = budget - rejubudget;
                 }
             }
             let synthetic = language.filter((elem) => elem.synthetic);
             return {
-                prog: workList[0].prog, status: "INCORRECT", score: workList[0].score, cost: initBudget - budget,
-                synthetic:synthetic,
+                prog: state.workList[0].prog, status: "INCORRECT", score: state.highScore(), cost: state.incrementCost(initBudget - budget),
+                synthetic: synthetic,
+                state:state,
                 initBudget: initBudget, crashing: 0, print: solprint
             };
         }
@@ -2737,9 +2820,19 @@
 
         randomizeClone = fancyRandClone; 
 
-        let synthesizer = randomAndHillClimb; // smcSynth;  // randomRandom;  // //
+        let synthesizer;
+        if (config.solver == 'hillclimb') {
+            synthesizer = randomAndHillClimb;
+        } else if (config.solver == 'smc') {
+            synthesizer = smcSynth;
+        } else if (config.solver == 'random') {
+            synthesizer = randomRandom;
+        } else {
+            throw "Solver '" + config.solver + "' does not exist.";
+        }
+        
 
-        let rv = synthesizer(langWithInputs, examples, bound, N, outType);
+        let rv = synthesizer(langWithInputs, examples, bound, N, outType, config.initialState);
 
         return rv;
 
