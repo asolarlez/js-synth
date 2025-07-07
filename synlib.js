@@ -352,29 +352,29 @@
     class TypeChecker {
 
         constructor() {
-            this.constraints = {};
+            this.constraints = new Map();
         }
 
         reset() {
-            this.constraints = {};
+            this.constraints = new Map();
         }
 
         checkpoint() {
             //return a clone of the constraints object
             //return Object.assign({}, this.constraints);
             let rv = [];
-            let tc = this.constraints;
-            for (let key in tc) {
-                rv.push([key, tc[key]]);
+            let tc = this.constraints.entries();
+            for (let x of tc) {
+                rv.push(x);
             }
             return rv;
         }
         revert(checkpoint) {
             //this.constraints = Object.assign({}, checkpoint);
-            let tc = {};
+            let tc = new Map();
             for (let i = 0; i < checkpoint.length; ++i) {
                 let ent = checkpoint[i];
-                tc[ent[0]] = ent[1];
+                tc.set(ent[0], ent[1]);
             }
             this.constraints = tc;
         }
@@ -409,8 +409,8 @@
             return type.replaceVar((t) => {
                 t = t.addId(id);
                 let ts = t.toString();
-                if (ts in this.constraints) {
-                    return this.convert(this.constraints[ts], undefined, limit-1);
+                if (this.constraints.has(ts)) {
+                    return this.convert(this.constraints.get(ts), undefined, limit-1);
                 } else {
                     return t;
                 }
@@ -432,8 +432,8 @@
             }            
             return type.replaceVar((t) => {               
                 let ts = t.toString();
-                if (ts in this.constraints) {
-                    return this.localConvert(this.constraints[ts], limit - 1);
+                if (this.constraints.has(ts)) {
+                    return this.localConvert(this.constraints.get(ts), limit - 1);
                 } else {
                     return t;
                 }
@@ -442,15 +442,15 @@
 
 
         constraint(ta, tb) {
-            let taconv = this.constraints[ta];
+            let taconv = this.constraints.get(ta);
             if (taconv) {
                 let alt = this.localConvert(taconv);                
                 if (alt instanceof TypeVar) {                    
                     if (!(tb instanceof TypeVar)) {
                         //We need to check if the parametric doesn't contain alt internally, because then it wouldn't be compatible.
                         if (!(tb.contains(alt))) {
-                            this.constraints[ta] = tb;
-                            this.constraints[alt.toString()] = tb;
+                            this.constraints.set(ta, tb);
+                            this.constraints.set(alt.toString(), tb);
                             return true;
                         } else {
                             //console.log("Trying to unify " + ta + " with " + tb.toString() + " but they are incompatible.");                            
@@ -482,7 +482,7 @@
                 if (tb.contains(ta)) {
                     return false;
                 }
-                this.constraints[ta] = tb;
+                this.constraints.set(ta, tb);
                 return true;
             }            
         }
@@ -515,9 +515,9 @@
                     }
                     // We  want to pick one to be the primary, so that the secondary just gets replaced by the primary.
                     //The goal is to avoid cycles.
-                    let taconv = this.constraints[tas];
+                    let taconv = this.constraints.get(tas);
                     if (taconv) {
-                        let tbconv = this.constraints[tbs];
+                        let tbconv = this.constraints.get(tbs);
                         if (tbconv) {
                             //Both already have constraints. We need to check if they are compatible.
                             //If they are not, then we are done and return false.
@@ -533,7 +533,7 @@
                             return this.constraint(tbs, this.localConvert(taconv));
                         }
                     } else {
-                        let tbconv = this.constraints[tbs];
+                        let tbconv = this.constraints.get(tbs);
                         if (tbconv) {
                             //Easy, tb has constraints, ta does not. We just point ta to tb.
                             return this.constraint(tas, this.localConvert(tbconv));
@@ -1885,7 +1885,7 @@
                 if (key in this.tracker) {
                     tstate = this.tracker[key];
                 }
-                if (!(tstate && tstate.visits > 40)) {
+                if (!(tstate && tstate.scores > 40)) {
                     return uniform();
                 }
                 scores = this.succScores(state, language, extras);
@@ -1964,17 +1964,7 @@
             return { parent: "START", parentIdx: 0 , grandpa: "", idx: 0, depth: 0 };
         }
         trackAction(state, node) {
-            let key = stateToStr(state);
-            let action = getLabel(node);
-            if (key in this.tracker) {
-                let tr = this.tracker[key];
-                tr.visits++;                
-            } else {
-                let tr = {
-                    visits: 1, reward: 0, scores: 0
-                }                
-                this.tracker[key] = tr;
-            }
+            
         }
         transition(state, node, childidx) {
             childidx = childidx || 0;
@@ -1998,7 +1988,7 @@
                     q.scores++;
                 } else {
                     let tr = {
-                        visits: 1, reward: score, scores: 1
+                        reward: score, scores: 1
                     };
                     tracker[key] = tr;
                 }
@@ -2013,26 +2003,7 @@
             });
         }
         failedState(state) {
-            return;
-            let score = -100;
-            let tracker = this.tracker;
-            function scoreF(key) {
-                if (key in tracker) {
-                    let q = tracker[key];
-                    q.reward = (q.reward * q.scores + score) / (q.scores + 1);
-                    q.scores++;
-                } else {
-                    let tr = {
-                        visits: 1, reward: score, scores: 1
-                    };
-                    tracker[key] = tr;
-                }
-            }
-            let key = stateToStr(state);
-            scoreF(key);
-            if (state.pred) {
-                this.failedState(state.pred);
-            }
+            return;            
         }
     }
 
