@@ -6,6 +6,7 @@ let rvError;
 let isError;
 let isBadResult;
 let Tp;
+let deserializeState;
 
 if (typeof module !== 'undefined' && module.exports) {
     let synlib = require('./synlib.js');
@@ -17,7 +18,8 @@ if (typeof module !== 'undefined' && module.exports) {
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
-Tp = synlib.Tp;
+    Tp = synlib.Tp;
+    deserializeState = synlib.deserializeState;
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
@@ -29,7 +31,8 @@ else if (typeof exports === 'undefined') {
     rvError = synlib.rvError;
     isError = synlib.isError;
     isBadResult = synlib.isBadResult;
-Tp = synlib.Tp;
+    Tp = synlib.Tp;
+    deserializeState = synlib.deserializeState;
 }
 
 
@@ -312,10 +315,11 @@ let problems = {
 
 
 
-function runOne(p, verbose) {
+function runOne(p, verbose, N, config) {
+    N = N || 100000
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
-    let sol = synthesize(problem.intypes, problem.io, maplanguage, numscore, 0.001, problem.depth, 100000);
+    let sol = synthesize(problem.intypes, problem.io, maplanguage, numscore, 0.001, problem.depth, N, config);
     console.log(p, sol.print());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
@@ -329,7 +333,22 @@ function runOne(p, verbose) {
 
 
 function r2r(verbose) {
-    runOne("2dreduce", verbose);
+    let state = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'hillclimb' });      
+    while (state.status == 'INCORRECT') {
+       
+        if (true) {// state.state.highScore() == state.state.lowScore()
+            let tmp = state.state.componentizeGlobal(maplanguage);
+            console.log(tmp);
+            let statestr = state.state.serialize();
+            let sn = deserializeState(statestr, maplanguage);
+            state.state = sn;
+        }
+        
+        state = runOne("2dreduce", verbose, 10000, { initialState: state.state, solver:'hillclimb' });
+    }
+    
+    
+
 }
 
 

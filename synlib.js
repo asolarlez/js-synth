@@ -35,12 +35,14 @@
 
 
     class Type {
-
+        constructor(kind) {
+            this.kind = kind;
+        }
     }
 
     class Primitive extends Type {
         constructor(name) {
-            super();
+            super("base");
             this.name = name;
             this.isFixed = true;
         }
@@ -77,7 +79,7 @@
 
     class TypeVar extends Type {
         constructor(name, id) {
-            super();
+            super("var");
             if (name in greeks) {
                 this.name = greeks[name];
             } else {
@@ -140,7 +142,7 @@
 
     class Parametric extends Type {
         constructor(name, params) {
-            super();
+            super("param");
             this.name = name;
             this.params = params;
             let ifx = true;
@@ -239,7 +241,7 @@
     }
     class FunctionType extends Type {
         constructor(from, to) {
-            super();
+            super("fun");
             this.from = from;
             this.to = to;
             this.isFixed = from.isFixed && to.isFixed; //function types are fixed if both their from and to types are fixed.
@@ -409,8 +411,9 @@
             return type.replaceVar((t) => {
                 t = t.addId(id);
                 let ts = t.toString();
-                if (this.constraints.has(ts)) {
-                    return this.convert(this.constraints.get(ts), undefined, limit-1);
+                let converted = this.constraints.get(ts);
+                if (converted) {
+                    return this.convert(converted, undefined, limit-1);
                 } else {
                     return t;
                 }
@@ -1607,7 +1610,7 @@
     function componentize(workList, language, st) {
         let result = stitch(workList.map((elem) => elem.prog), language);
         if (!result) {
-            return workList;
+            return { workList: workList, component:undefined };
         }
         function bulkMapAdd(map1, map2) {
             for (let k in map2) {
@@ -1780,6 +1783,13 @@
         let visitor = new GenerateCompImplementation(result.construct);
         let imp = result.construct.accept(visitor);
         let name = "__foo" + language.length;
+        let found = language.find((elem) => elem.name == name);
+        let i= language.length+1;
+        while (found) {
+            name = "__foo" + i;
+            ++i;
+            found = language.find((elem) => elem.name == name);
+        }
         function myImp() {
             let args = new Array(arguments.length);
             for (let i = 0; i < arguments.length; ++i) { args[i] = arguments[i]; }
@@ -1797,11 +1807,10 @@
         let replacer = new ComponentReplacer(result, langEntry);
         workList = workList.map((elem) => {
             return { prog: resetStates(elem.prog.accept(replacer)), score: elem.score }
-        });
-        language.push(langEntry);
+        });        
         workList.forEach((elem) => st.scoreTree(elem.prog, (1 - elem.score) * 100));
         st.resetPolicyCache();
-        return workList;
+        return { workList: workList, component: langEntry };
     }
 
     function getLabel(node, stage) {
@@ -1827,8 +1836,12 @@
     }
 
     class StatsTracker {
-        constructor() {
-            this.tracker = {};
+        constructor(serialized) {
+            if (serialized) {
+                this.tracker = serialized.tracker;
+            } else {
+                this.tracker = {};
+            }            
             this.policyCache = {};
         }
         resetPolicyCache() {
@@ -1970,7 +1983,7 @@
             childidx = childidx || 0;
             let action = getLabel(node);
 
-            return { parent: action, grandpa: state.parent, parentIdx:state.idx , idx: childidx, depth: state.depth + 1, pred: state };
+            return { parent: action, grandpa: state.parent, parentIdx: state.idx, idx: childidx, depth: state.depth + 1 }; // , pred: state 
         }
         failedAction(state, action) {
             //console.log(stateToStr(state), getLabel(action));
@@ -2007,15 +2020,146 @@
         }
     }
 
+    function deserializeType(type) {
+        let rv;
+        if (type.kind == 'base') {
+            rv = new Primitive(type.name);
+        }
+        if (type.kind == 'var') {
+            rv = new TypeVar(type.name, type.id);
+        }
+        if (type.kind == 'param') {
+            rv = new Parametric(type.name, type.params.map((t) => deserializeType(t)));
+        }
+        if (type.kind == 'fun') {
+            rv = new FunctionType(deserializeType(type.from), deserializeType(type.to));
+        }
+        for (let x in type) {
+            if (!(x in rv)) {
+                rv[x] = type[x];
+            }
+        }
+        return rv;
+    }
 
+
+    function deserializeProg(prog, language) {
+
+        
+        function deserialize(prog, langMap) {
+            let rv;
+            if (prog.kind == 'fun') {
+                let comp = langMap[prog.name];
+                if (comp.parametric) {
+                    rv = new pFunN(prog.name, comp.imp, comp.abstract, prog.args.map((arg) => deserialize(arg, langMap)), prog.param);
+
+                } else {
+                    rv = new FunN(prog.name, comp.imp, comp.abstract, prog.args.map((arg) => deserialize(arg, langMap)));
+                }
+            }
+            else if (prog.kind == 'lambda') {
+                rv = new LambdaN(deserialize(prog.body, langMap));
+
+            } else if (prog.kind == 'input') {
+                rv = new InputN(prog.name);
+            } else if (prog.kind == 'index') {
+                rv = new deBroujin(prog.idx);
+            } else if (prog.kind == 'int') {
+                rv = new IntN(prog.val, prog.range);
+            } else if (prog.kind == 'plug') {
+                rv = new Plug();
+            }
+            rv.id = prog.id;
+            if ('type' in prog) {
+                rv.type = deserializeType(prog.type);
+            }
+            if ('returntype' in prog) {
+                rv.returntype = deserializeType(prog.returntype);
+            }
+            for (let x in prog) {
+                if (!(x in rv)) {
+                    rv[x] = prog[x];
+                }
+            }
+            return rv;
+
+        }
+        let langMap = {};
+        for (let comp of language) {
+            if (comp.kind == 'fun') {
+                langMap[comp.name] = comp;
+            }
+        }
+        return deserialize(prog, langMap);
+    }
+
+    function deserializeComponent(component, language) {
+        component.source = deserializeProg(component.source, language);
+        let visitor = new GenerateCompImplementation(component.source);
+        let imp = component.source.accept(visitor);
+        function myImp() {
+            let args = new Array(arguments.length);
+            for (let i = 0; i < arguments.length; ++i) { args[i] = arguments[i]; }
+            return imp(args);
+        }
+        component.imp = myImp;
+        if ('type' in component) {
+            component.type = deserializeType(component.type);
+        }
+        if ('returntype' in component) {
+            component.returntype = deserializeType(component.returntype);
+        }
+        if ('typeargs' in component) {
+            component.typeargs = component.typeargs.map((e) => deserializeType(e));
+        }
+        return component;
+    }
+
+    function deserializeState(state_stream, language) {
+        let rv = new SynthesizerState(0);
+        rv.deserialize(state_stream, language);
+        return rv;
+    }
 
     class SynthesizerState {
         constructor(beamsize) {
             this.workList = new Array(beamsize);
+            this.extraComponents = [];
             this.beamsize = beamsize;
             this.bestProgram = undefined;
             this.bestScore = 100000;
+            this.st = new StatsTracker();
             this.cost = 0;
+        }
+        serialize() {
+            return JSON.stringify(this);
+        }
+        deserialize(json_state, language) {
+            let tmpstate;
+            if (typeof (json_state) == 'string') {
+                tmpstate = JSON.parse(json_state);
+            } else {
+                tmpstate = json_state;
+            }            
+            let extendedLanguage = language.slice(0);
+
+            this.extraComponents = tmpstate.extraComponents.map((e) => {
+                let rv = deserializeComponent(e, language);
+                rv.pos = extendedLanguage.length;
+                extendedLanguage.push(rv);
+                return rv;
+            });
+            
+            
+            this.workList = tmpstate.workList.map((e) => { return { prog: deserializeProg(e.prog, extendedLanguage), score: e.score }; });            
+            this.beamsize = tmpstate.beamsize;
+            this.bestProgram = deserializeProg(tmpstate.bestProgram, language);
+            this.bestScore = tmpstate.bestScore;
+            this.st = new StatsTracker(tmpstate.st);
+            this.cost = tmpstate.cost;
+        }
+        getTracker() {
+            return this.st;
         }
         populate(gen) {
             for (let i = 0; i < this.beamsize; ++i) {
@@ -2072,12 +2216,61 @@
                 }
             }
         }
+        componentizeGlobal(core_language) {
+            let language = core_language.slice(0);
+            this.updateLanguage(language);
+            return this.componentize(language);
+        }
+        componentize(language) {
+            let rv = componentize(this.workList, language, this.st);
+            if (!rv.component) {
+                //no new components.
+                return;
+            }
+            //We need to update the worklist with the new components.
+            this.workList = rv.workList;            
+            this.extraComponents.push(rv.component);
+            return rv.component;
+        }
+        getExtraComponents() {
+            return this.extraComponents;
+        }
+        updateLanguage(language) {
+            for (let component of this.extraComponents) {
+                component.pos = language.length;
+                language.push(component);
+            }            
+        }
+        getBestProg() {
+            return this.bestProgram;
+        }
     }
 
+    class Result {
+        constructor(status, bestProgram, bestScore, components, cost, state) {
+            this.prog = bestProgram;
+            this.status = status;
+            this.score = bestScore;            
+            this.cost = cost;
+            this.state = state;
+        }
+        print() {
+            let sol = this;
+            let synthetics = "";
+            let ec = this.state.getExtraComponents();
+            if (ec.length > 0) {
+                synthetics = '\n' + ec.map((elem) => elem.name + " : " + elem.source.print() + "\n").reduce((acc, elem) => acc + elem, "");
+            }
+            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print() + synthetics;
+        }
+        toJSON() {
+            return JSON.stringify(this);
+        }
+    }
 
     function synthesize(inputspec, examples, language, scoreOutputs, threshold, bound, N, config) {
         
-        let st = new StatsTracker();
+        let st;
         let tc = new TypeChecker();
 
         
@@ -2344,15 +2537,25 @@
             }
             if (!state) {
                 state = new SynthesizerState(config.beamsize || 20);
+                st = state.getTracker();
                 state.populate((i) => {
                     tc.reset();
                     let newprog = randomProgram(outType, language, bound);
-                    score = testProg(newprog);                                                         
+                    score = testProg(newprog);
                     totalScore += mass(score);
-                    return { prog: newprog, score: score };   
+                    return { prog: newprog, score: score };
                 });
-                budget -= beamsize;
+                budget -= state.beamsize;
+            } else {
+                totalScore = 0;
+                state.forEach((c) => {
+                    totalScore += mass(c.score);
+                });
+                st = state.getTracker();
+                state.updateLanguage(language);
             }
+
+            
 
             
             state.sortWorklist();
@@ -2365,9 +2568,9 @@
                 }
                 let candidates = [];
                 state.forEach((c) => {
-                    let n = Math.ceil((beamsize * mass(c.score)) / totalScore)
+                    let n = Math.ceil((state.beamsize * mass(c.score)) / totalScore)
                     for (let i = 0; i < n; ++i) {
-                        if (candidates.length < beamsize) {
+                        if (candidates.length < state.beamsize) {
                             candidates.push(c);
                         }
                     }
@@ -2414,7 +2617,7 @@
 
             }
             return {
-                prog: bestProgram, status: "INCORRECT", score: bestScore, cost: state.incrementCost(initBudget - budget),
+                prog: state.bestProgram, status: "INCORRECT", score: state.bestScore, cost: state.incrementCost(initBudget - budget),
                 state:state,
                 initBudget: initBudget, crashing: 0, print: solprint
             };
@@ -2440,7 +2643,7 @@
             
             
             const initBudget = budget;
-            let rejuvenate = 0;
+            let rejuvenate = -1;
             let compStep = 10000;
             function testProg(prog) {
 
@@ -2457,24 +2660,27 @@
             let score; 
             if (!state) {
                 state = new SynthesizerState(config.beamsize || 10);
+                st = state.getTracker();
                 state.populate((i) => {
                     tc.reset();
                     let newprog = randomProgram(outType, language, bound);
                     score = testProg(newprog);
-                    return { prog: newprog, score: score };                   
+                    return { prog: newprog, score: score };
                 });
                 budget -= state.beamsize;
+            } else {
+                st = state.getTracker();
+                state.updateLanguage(language);
             }
-
             
-            
+                        
             
             // sort so that the lowest score is workList[0]
             state.sortWorklist();
             
             
             
-
+            let doComponents = config.componentize == true;
             let rejubudget = 300;
             let lastCacheReset = budget;
             let highScore = state.highScore();
@@ -2492,9 +2698,13 @@
                     highScore = state.highScore();
                     lowScore = state.lowScore();
                 }
-                if(budget < lastHighLowChange - compStep) {
+                if (doComponents && budget < lastHighLowChange - compStep) {
                     //high and low scores have not changed in a while, so let's create some components and see what happens.
-                    state.setWorkList(componentize(state.workList, language, st));                    
+                    let comp = state.componentize(language, st);                    
+                    if (comp) {
+                        comp.pos = language.length;
+                        language.push(comp);
+                    }
                     console.log(budget, ": Componentized");
                     lastHighLowChange = budget;
                     compStep = compStep * 2;
@@ -2570,7 +2780,7 @@
                         state.workList[i] = { prog: adjusted, score: score };
                     }
                     state.workList.sort((a, b) => quant(a) - quant(b));   
-                    rejuvenate = 0;
+                    rejuvenate = -1;
                     rejubudget = rejubudget * 1.5;
                 }
                 if (state.highScore() < 1 && state.highScore() == state.lowScore() && rejuvenate < 1) {
@@ -2901,14 +3111,17 @@
     }
 
 
-
+    /*
     // Export for Node.js (CommonJS)
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp };
+        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
     }
     // Export for browsers (ES6 Modules)
     else if (typeof exports === 'undefined') {
-        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp };
+        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
     }
+    */
+    export { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
+
 
 })();
