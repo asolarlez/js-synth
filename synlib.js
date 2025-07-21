@@ -1593,6 +1593,12 @@
             if(worklist.length == 0 ) {
                 return undefined; // No more candidates to grow.
             }
+            //let num = 3;
+            if (worklist.length > 10000) {
+                worklist = worklist.slice(0, 5000);  //filter((elem) => elem.count > num);
+                //++num;
+            }
+
             let completed = true;
             for (let idx in worklist) {
                 completed = completed && worklist[idx].complete;
@@ -2121,6 +2127,34 @@
         return rv;
     }
 
+
+    class FunctionReplacer extends ASTVisitor {
+        constructor(renames) {
+            super();
+            this.renames = renames;         
+            for (let x in renames) {
+                let elem = renames[x];
+                elem.usecount = 0;
+            }
+        }
+
+        visitFun(fun) {
+            let rv = super.visitFun(fun);
+            let name = rv.name;
+            if (name in this.renames) { 
+                let fun = rv;
+                rv = new FunN(this.renames[name].name, rv.imp, rv.absfun, rv.args).setState(rv.state).setDepth();
+                rv.type = fun.type;
+                rv.returntype = fun.returntype;
+                rv.typeargs = fun.typeargs;
+                this.renames[name].usecount++;
+            }
+            return rv;
+        }
+    }
+
+
+
     class SynthesizerState {
         constructor(beamsize) {
             this.workList = new Array(beamsize);
@@ -2131,6 +2165,130 @@
             this.st = new StatsTracker();
             this.cost = 0;
         }
+
+        /**
+         * 
+         * This function merges another state into this state. If newBeamsize < this.beamsize+otherState.beamsize, 
+         * then it will select from the combination the [newBeams] beams with the highest score. 
+         * @param {any} otherState
+         * @param {any} newBeamsize
+         */
+        merge(otherState, newBeamsize) {
+            //Step 1, we need to merge the two workList's and pick the top [newBeamsize] beams. We need to remember
+            //which ones came from this and which ones came from otherState, because if they use extraComponents, they
+            //will use the same name for different components.
+
+            let newWL = this.workList.map((e) => {
+                e.origin = 1;
+                return e;
+            });
+
+            newWL = newWL.concat(otherState.workList.map((e) => {
+                e.origin = 2;
+                return e;
+            }));
+
+            newWL.sort((a, b) => a.score - b.score);
+
+            newWL = newWL.slice(0, newBeamsize);
+
+            this.workList = newWL;
+            this.beamsize = newBeamsize;
+
+            //Step 2. We need to rename the extraComponents so they all have unique names.
+            let newNameID = 0;
+            let renameThis = {};
+            for (let comp of this.extraComponents) {
+                renameThis[comp.name] = { name: "__foo" + newNameID };
+                newNameID++;
+            }
+            let renameThat = {};
+            for (let comp of otherState.extraComponents) {
+                renameThat[comp.name] = { name: "__foo" + newNameID };
+                newNameID++;
+            }
+            if (newNameID > 0) {
+                let thisRenamer = new FunctionReplacer(renameThis);
+                let thatRenamer = new FunctionReplacer(renameThat);
+                for (let candidate of newWL) {
+                    if (candidate.origin == 1) {
+                        candidate.prog = candidate.prog.accept(thisRenamer);
+                    } else {
+                        candidate.prog = candidate.prog.accept(thatRenamer);
+                    }
+                }
+                        
+            //Step 3. we need to merge the extraComponents. If a component is not used in the new workList, we don't need it in
+            //the extraComponents anymore. We should also be on the lookout for redundant components.
+                let newECs = [];
+                for (let comp of this.extraComponents) {
+                    if (renameThis[comp.name].usecount > 0) {
+                        comp.name = renameThis[comp.name].name;
+                        newECs.push(comp);
+                    }
+                }
+                for (let comp of otherState.extraComponents) {
+                    if (renameThat[comp.name].usecount > 0) {
+                        comp.name = renameThat[comp.name].name;
+                        newECs.push(comp);
+                    }
+                }
+                this.extraComponents = newECs;
+            }
+            if (this.bestScore > otherState.bestScore) {
+                this.bestScore = otherState.bestScore;
+                this.bestProgram = otherState.bestProgram;
+            }
+            this.cost += otherState.cost;//costs add because we are now incorporating all the knowledge from
+            //otherState into this, so we have to account for how much it cost to produce that knowledge.
+
+            //Step 4. We need to merge the StatsTracker. First, we need to rename the states to account for the new component
+            //names and remove states corresponding to components that disappeared. Then we merge and we keep the best value
+            //for each component.
+            function renameInTable(table, renamer) {
+                function newName(id) {
+                    if (id.length == 0) return id;
+                    if (id.substring(0, 4) == 'fun/') {
+                        let fname = id.substring(4);
+                        if (fname in renamer) {
+                            return renamer[fname].name;
+                        }
+                    }
+                    return id;
+                }
+
+                let rv = {};
+                for (let key in table) {
+                    let parts = key.split(':'); // id:parent:pid:child
+                    let parent = newName(parts[1]);
+                    let child = newName(parts[3]); 
+                    let newkey = parts[0] + ':' + parent + ':' + parts[2] + ':' + child;
+                    rv[newkey] = table[key];
+                }
+                return rv;
+            }
+
+            let trackerThis = renameInTable(this.st.tracker, renameThis);
+            let trackerThat = renameInTable(otherState.st.tracker, renameThat);
+            //Now they are both in the same key space.
+            for (let key in trackerThis) {
+                if (key in trackerThat) {
+                    let entThis = trackerThis[key];
+                    let entThat = trackerThat[key];
+                    trackerThis[key] = { reward: Math.max(entThis.reward, entThat.reward), scores: entThis.scores + entThat.scores };
+                }
+            }
+            for (let key in trackerThat) {
+                if (!(key in trackerThis)) {                    
+                    let entThat = trackerThat[key];
+                    trackerThis[key] = { reward: entThat.reward, scores: entThat.scores };
+                }
+            }
+            this.st.tracker = trackerThis;
+            this.st.resetPolicyCache();
+        }
+
+
         serialize() {
             return JSON.stringify(this);
         }
@@ -2173,6 +2331,10 @@
         }
         sortWorklist() {
             this.workList.sort((a, b) => a.score - b.score);
+            if (this.highScore() < this.bestScore) {
+                this.bestScore = this.highScore();
+                this.bestProgram = this.workList[0].prog;
+            }
         }
         forEach(f) {
             this.workList.forEach(f);
@@ -2242,12 +2404,23 @@
             }            
         }
         getBestProg() {
+            if (this.highScore() < this.bestScore) {
+                this.bestScore = this.highScore();
+                this.bestProgram = this.workList[0].prog;
+            }
             return this.bestProgram;
+        }
+        getBestScore() {
+            if (this.highScore() < this.bestScore) {
+                this.bestScore = this.highScore();
+                this.bestProgram = this.workList[0].prog;
+            }
+            return this.bestScore;
         }
     }
 
     class Result {
-        constructor(status, bestProgram, bestScore, components, cost, state) {
+        constructor(status, bestProgram, bestScore, cost, state) {
             this.prog = bestProgram;
             this.status = status;
             this.score = bestScore;            
@@ -2265,6 +2438,15 @@
         }
         toJSON() {
             return JSON.stringify(this);
+        }
+        merge(other, newBeamsize) {
+            if (other.score < this.score) {
+                this.score = other.score;
+                this.prog = other.prog;
+                this.status = other.status;
+            }
+            this.cost += other.cost;
+            this.state.merge(other.state, newBeamsize);
         }
     }
 
@@ -2602,12 +2784,8 @@
                 if (state.bestScore < threshold) {
                     //All outputs correct enough, we are done!
                     //return an object with the program, the status, the score, and the budget. 
-                    //it also has a print function that returns a string representation of the object.
-                    return {
-                        prog: state.bestProgram, status: "CORRECT", score: state.bestScore, cost: state.incrementCost(initBudget - budget),
-                        state:state,
-                        initBudget: initBudget, crashing: 0, print: solprint
-                    };
+                    //it also has a print function that returns a string representation of the object.                    
+                    return new Result("CORRECT", state.getBestProg(), state.getBestScore(), state.incrementCost(initBudget - budget), state);                    
                 }
                 state.sortWorklist();
                 
@@ -2616,13 +2794,7 @@
                 //console.log(disp);
 
             }
-            return {
-                prog: state.bestProgram, status: "INCORRECT", score: state.bestScore, cost: state.incrementCost(initBudget - budget),
-                state:state,
-                initBudget: initBudget, crashing: 0, print: solprint
-            };
-
-
+            return new Result("INCORRECT", state.getBestProg(), state.getBestScore(), state.incrementCost(initBudget - budget), state);                    
         }
 
 
@@ -2759,15 +2931,8 @@
                 state.workList.sort((a, b) => quant(a) - quant(b));                 
                 if (state.highScore() < threshold) {
                     //All outputs correct enough, we are done!
-                    //return an object with the program, the status, the score, and the budget.
-                    //it also has a print function that returns a string representation of the object.
-                    let synthetic = language.filter((elem) => elem.synthetic);
-                    return {
-                        prog: state.workList[0].prog, status: "CORRECT", score: state.workList[0].score, cost: state.incrementCost(initBudget - budget),
-                        state:state,
-                        synthetic: synthetic,
-                        initBudget: initBudget, crashing: 0, print: solprint
-                    };
+                    //return an object with the program, the status, the score, and the budget.                    
+                    return new Result("CORRECT", state.getBestProg(), state.getBestScore(), state.incrementCost(initBudget - budget), state);                    
                 }
                 if (budget == rejuvenate) {                    
                     for (let i = state.beamsize / 2; i < state.beamsize; ++i) {
@@ -2787,13 +2952,8 @@
                     rejuvenate = budget - rejubudget;
                 }
             }
-            let synthetic = language.filter((elem) => elem.synthetic);
-            return {
-                prog: state.workList[0].prog, status: "INCORRECT", score: state.highScore(), cost: state.incrementCost(initBudget - budget),
-                synthetic: synthetic,
-                state:state,
-                initBudget: initBudget, crashing: 0, print: solprint
-            };
+            return new Result("INCORRECT", state.getBestProg(), state.getBestScore(), state.incrementCost(initBudget - budget), state);                    
+            
         }
 
 
@@ -3111,7 +3271,7 @@
     }
 
 
-    /*
+    
     // Export for Node.js (CommonJS)
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
@@ -3120,8 +3280,8 @@
     else if (typeof exports === 'undefined') {
         window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
     }
-    */
-    export { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
+    
+    //export { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
 
 
 })();

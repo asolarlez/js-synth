@@ -351,6 +351,20 @@ function r2r(verbose) {
 
 }
 
+function testMerge(verbose) {
+    let state = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'hillclimb' }); 
+    let s2 = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'smc' }); 
+    state.state.componentizeGlobal(maplanguage);
+    s2.state.componentizeGlobal(maplanguage);
+    state.merge(s2, 10);
+    while (state.status == 'INCORRECT') {
+        state = runOne("2dreduce", verbose, 10000, { initialState: state.state, solver: 'hillclimb' });
+    }
+
+
+}
+
+
 
 function runAll(verbose) {
     let sols = {};
@@ -391,9 +405,9 @@ function run() {
 
 // Export for Node.js (CommonJS)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { language: maplanguage, run: run, runAll: runAll, runOne };
+    module.exports = { language: maplanguage, run: run, runAll: runAll, runOne, testMerge };
 }
 // Export for browsers (ES6 Modules)
 else if (typeof exports === 'undefined') {
-    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne, r2r };
+    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne, r2r, testMerge };
 }
