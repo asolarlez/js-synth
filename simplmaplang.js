@@ -368,4 +368,4 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-export { maplanguage as language, run, runAll, runOne, testMerge };
+export { maplanguage as language, numscore as scoring, problems as testproblems, run, runAll, runOne, testMerge };

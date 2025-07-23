@@ -2,3 +2,6 @@
 out
 outTypes
 outRefactored
+node_modules/*
+package-lock.json
+

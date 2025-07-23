@@ -2121,9 +2121,24 @@
     }
 
     function deserializeState(state_stream, language) {
-        let rv = new SynthesizerState(0);
-        rv.deserialize(state_stream, language);
-        return rv;
+
+        if(typeof state_stream == "string"){
+            state_stream = JSON.parse(state_stream);
+        }
+        
+        if(state_stream.kind == "result"){
+            let tmpstate = new SynthesizerState(0);
+            tmpstate.deserialize(state_stream.state, language);
+            let prog = deserializeProg(state_stream.prog, language);
+            let rv = new Result(state_stream.status, prog, state_stream.score, state_stream.cost, tmpstate);
+            return rv;
+        }else{
+            let rv = new SynthesizerState(0);
+            rv.deserialize(state_stream, language);
+            return rv;
+        }
+        
+        
     }
 
 
@@ -2425,6 +2440,7 @@
             this.score = bestScore;            
             this.cost = cost;
             this.state = state;
+            this.kind = "result";
         }
         print() {
             let sol = this;
@@ -2435,7 +2451,7 @@
             }
             return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print() + synthetics;
         }
-        toJSON() {
+        serialize(){
             return JSON.stringify(this);
         }
         merge(other, newBeamsize) {
@@ -3281,5 +3297,6 @@ export {
     score,
     numscore,
     Tp,
-    deserializeState
+    deserializeState,
+    deserializeType
 };

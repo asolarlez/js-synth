@@ -292,4 +292,4 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-export { strlanguage as language, run, runAll, runOne };
+export { strlanguage as language,  fancyStringScore as scoring, run, runAll, runOne };

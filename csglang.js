@@ -245,7 +245,7 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-export { csglanguage as language, run, runAll };
+export { csglanguage as language, score as scoring, run, runAll };
 
 
 
