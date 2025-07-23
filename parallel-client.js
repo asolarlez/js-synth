@@ -1,12 +1,22 @@
 import fetch from 'node-fetch';
 import { deserializeState } from './synlib.js';
+import zlib from 'zlib';
+import { promisify } from 'util';
+
+const gzip = promisify(zlib.gzip);
 
 // Helper: send a POST to /synthesize and return the parsed result
 async function postSynthesize(server, body, language) {
+    const jsonBody = JSON.stringify(body);
+    const compressedBody = await gzip(jsonBody);    
     const response = await fetch(`${server}/synthesize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        headers: { 
+            'Content-Type': 'application/json',
+            'Content-Encoding': 'gzip',
+            'Content-Length': compressedBody.length
+        },
+        body: compressedBody
     });
     if (!response.ok) {
         const err = await response.text();
@@ -66,7 +76,7 @@ export async function parallelSolve(problem, servers, language, config = {}) {
             // Merge all states
             mergedState = mergeStates(results);
             round++;
-            if (round > 5) throw new Error('Too many rounds, giving up.');
+            if (round > 15) throw new Error('Too many rounds, giving up.');
         } else {
             console.log("NO MERGING", round); 
             // If any result is missing state, or not INCORRECT, stop

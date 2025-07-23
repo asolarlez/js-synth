@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { testproblems} from './simplmaplang.js';
+import { testproblems} from '../languages/simplmaplang.js';
 
 const serverUrl = process.argv[2] || 'http://localhost:3000';
 
@@ -10,7 +10,7 @@ async function testProblem(problemName, problem) {
         threshold: 0.001,
         bound: problem.depth,
         N: 10000,
-        config: {}
+        config: {language: "simplmap"}
     };
     const response = await fetch(`${serverUrl}/synthesize`, {
         method: 'POST',

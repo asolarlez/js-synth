@@ -1,9 +1,11 @@
 // This file imports synlib.js and then invokes the run method.
 
 // Import the synlib module
-import { runAll as runAllSimpl } from './simplmaplang.js';
-import { runAll as runAllString } from './stringlang.js';
-import { runAll as runAllCsg } from './csglang.js';
+import { runAll as runAllSimpl } from './languages/simplmaplang.js';
+import { runAll as runAllString } from './languages/stringlang.js';
+import { runAll as runAllCsg } from './languages/csglang.js';
+
+const Nruns = process.argv[2] ? parseInt(process.argv[2], 10) : 30;
 
 function runExperiments() {
     let aggregated = {};
@@ -15,7 +17,7 @@ function runExperiments() {
             aggregated[name].push(result[name]);
         }        
     }
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < Nruns; i++) {
         let simpRes = runAllSimpl();
         let strlRes = runAllString();
         let csgRes = runAllCsg();
