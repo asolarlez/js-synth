@@ -1,9 +1,9 @@
 // This file imports synlib.js and then invokes the run method.
 
 // Import the synlib module
-var simplmaplang = require('./simplmaplang.js');
-var stringlang = require('./stringlang.js');
-var csglang = require('./csglang.js');
+import { runAll as runAllSimpl } from './simplmaplang.js';
+import { runAll as runAllString } from './stringlang.js';
+import { runAll as runAllCsg } from './csglang.js';
 
 function runExperiments() {
     let aggregated = {};
@@ -16,9 +16,9 @@ function runExperiments() {
         }        
     }
     for (let i = 0; i < 30; i++) {
-        let simpRes = simplmaplang.runAll();
-        let strlRes = stringlang.runAll();
-        let csgRes = csglang.runAll();
+        let simpRes = runAllSimpl();
+        let strlRes = runAllString();
+        let csgRes = runAllCsg();
         addToAggregated(simpRes);
         addToAggregated(strlRes);
         addToAggregated(csgRes);

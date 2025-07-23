@@ -4,11 +4,13 @@
 <html>
 <head>
     <title>Runner</title>
-    <script src="synlib.js"></script>
-    <script src="simplmaplang.js"></script>
+    <script type="module">
+        import { testMerge } from './simplmaplang.js';
+        window.testMerge = testMerge;
+    </script>
 </head>
 <body>
-    <button onclick="simplmaplang.testMerge()">Run</button>
+    <button onclick="testMerge()">Run</button>
 </body>
 
 

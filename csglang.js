@@ -1,34 +1,4 @@
-let synthesize;
-let isHole;
-let makeHole;
-let score;
-let rvError;
-let isError;
-let isBadResult;
-let Tp;
-
-if (typeof module !== 'undefined' && module.exports) {
-    let synlib = require('./synlib.js');
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-}
+import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult, Tp } from './synlib.js';
 
 
 function unionHelper(sh1, sh2) {
@@ -275,13 +245,7 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { language: csglanguage, run: run, runAll: runAll };
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    window.csglang = { language: csglanguage, run: run };
-}
+export { csglanguage as language, run, runAll };
 
 
 

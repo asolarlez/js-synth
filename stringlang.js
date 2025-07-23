@@ -1,34 +1,4 @@
-let synthesize;
-let isHole;
-let makeHole;
-let score;
-let rvError;
-let isError;
-let isBadResult;
-let Tp;
-
-if (typeof module !== 'undefined' && module.exports) {
-    let synlib = require('./synlib.js');
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-}
+import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult, Tp } from './synlib.js';
 
 
 function substrBody(startA, startB, endA, endB, idx, input) {
@@ -322,10 +292,4 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { language: strlanguage, run: run, runAll: runAll, runOne };
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    window.stringlang = { language: strlanguage, run: run };
-}
+export { strlanguage as language, run, runAll, runOne };

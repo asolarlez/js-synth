@@ -1,40 +1,4 @@
-let synthesize;
-let isHole;
-let makeHole;
-let score;
-let rvError;
-let isError;
-let isBadResult;
-let Tp;
-let deserializeState;
-
-if (typeof module !== 'undefined' && module.exports) {
-    let synlib = require('./synlib.js');
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    numscore = synlib.numscore;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-    deserializeState = synlib.deserializeState;
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    synthesize = synlib.synthesize;
-    isHole = synlib.isHole;
-    makeHole = synlib.makeHole;
-    score = synlib.score;
-    numscore = synlib.numscore;
-    rvError = synlib.rvError;
-    isError = synlib.isError;
-    isBadResult = synlib.isBadResult;
-    Tp = synlib.Tp;
-    deserializeState = synlib.deserializeState;
-}
-
+import { synthesize, isHole, makeHole, score, numscore, rvError, isError, isBadResult, Tp, deserializeState } from './synlib.js';
 
 /**
  * 
@@ -404,10 +368,4 @@ function run() {
 
 
 // Export for Node.js (CommonJS)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { language: maplanguage, run: run, runAll: runAll, runOne, testMerge };
-}
-// Export for browsers (ES6 Modules)
-else if (typeof exports === 'undefined') {
-    window.simplmaplang = { language: maplanguage, run: run, runAll: runAll, runOne, r2r, testMerge };
-}
+export { maplanguage as language, run, runAll, runOne, testMerge };

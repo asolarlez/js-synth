@@ -1,5 +1,4 @@
-﻿(() => {
-
+﻿
 
     let verbosity = 0;
 
@@ -698,7 +697,7 @@
         }
     }
 
-    ROOT = new Root();
+    const ROOT = new Root();
     /**
      * Class representing a function node in the AST.
      */
@@ -3271,17 +3270,16 @@
     }
 
 
-    
-    // Export for Node.js (CommonJS)
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
-    }
-    // Export for browsers (ES6 Modules)
-    else if (typeof exports === 'undefined') {
-        window.synlib = { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
-    }
-    
-    //export { synthesize, rvError, isError, isBadResult, isHole, makeHole, score, numscore, Tp, deserializeState };
 
-
-})();
+export {
+    synthesize,
+    rvError,
+    isError,
+    isBadResult,
+    isHole,
+    makeHole,
+    score,
+    numscore,
+    Tp,
+    deserializeState
+};
