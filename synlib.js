@@ -702,11 +702,10 @@
      * Class representing a function node in the AST.
      */
     class FunN extends AST {
-        constructor(name, imp, abstract, args) {
+        constructor(name, imp, args) {
             super("fun");
             this.name = name;
-            this.imp = imp;
-            this.absfun = abstract;
+            this.imp = imp;            
             this.args = args;            
         }
         isParametric() {
@@ -752,21 +751,7 @@
         accept(visitor) {
             return visitor.visitFun(this);
         }
-        abstract(level, inputs, envt) {
-            let actuals = [];
-            for (let i in this.args) {
-                let arg = this.args[i];
-                let actual = arg.abstract(level - 1, inputs, envt);
-                if (isBadResult(actual)) {
-                    return actual;
-                }
-                if (isError(actual)) {
-                    return badResult(this, i, arg, actual.narg, level - 1, envt);
-                }
-                actuals.push(actual);
-            }
-            return this.absfun.apply(this, actuals);
-        }
+        
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
             for (let arg of this.args) {
@@ -803,17 +788,16 @@
 
     /**
      * This class represents a parametric function. This is a function with tunable parameters which need to be discovered by the synthesizer.
-     * The big difference with the constructor of FunN is that the imp and abstract functions are replaced by impP and abstractP which 
-     * are function generators that take the parameters as input and produce the actual imp and abstract functions as output. These generators are kept around as 
-     * impP and abstractP so they can be used to generate new versions of the actual functions with different parameters when needed.
+     * The big difference with the constructor of FunN is that the imp functions is replaced by impP which 
+     * is a function generator that take the parameters as input and produce the actual imp functions as output. 
+     * This generator is kept around as impP so it can be used to generate new versions of the actual functions with different parameters when needed.
      */
     class pFunN extends FunN {
-        constructor(name, impP, abstractP, args, param) {
-            super(name, impP(param), abstractP(param), args);
+        constructor(name, impP, args, param) {
+            super(name, impP(param), args);
             this.parametric = true;
             this.param = param;
-            this.impP = impP;
-            this.abstractP = abstractP;
+            this.impP = impP;           
         }
         isParametric() {
             return true;
@@ -851,9 +835,7 @@
         eval(level) {
             return this.val;
         }
-        abstract() {
-            return this.val;
-        }
+        
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
             if (end) { end(this) }
@@ -904,24 +886,7 @@
                 return rv;
             }
         }
-        abstract(level, inputs, envt) {
-            if (this.body instanceof Hole) {
-                return new Hole({ t: "fun" });
-            } else {
-                return (x) => {
-                    let newenv = envt.slice(0);
-                    newenv.push(x);
-                    let rv = this.body.abstract(level - 1, inputs, newenv);
-                    if (isBadResult(rv)) {
-                        return rv;
-                    }
-                    if (isError(rv)) {
-                        return badResult(this, undefined, this.body, rv.narg, level - 1, newenv);
-                    }
-                    return rv;
-                }
-            }
-        }
+        
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
             this.body.traverse(enter, reenter, end);
@@ -963,9 +928,7 @@
         eval(level, inputs, envt) {
             return inputs[this.name];
         }
-        abstract(level, inputs, envt) {
-            return this.eval(level, inputs, envt);
-        }
+        
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
             if (end) { end(this) }
@@ -997,9 +960,6 @@
         }
         eval(level, inputs, envt) {
             return envt[envt.length - 1 - this.idx];
-        }
-        abstract(level, inputs, envt) {
-            return this.eval(level, inputs, envt);
         }
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
@@ -1035,9 +995,7 @@
         eval(level, inputs, envt) {
             return this;
         }
-        abstract(level, inputs, envt) {
-            return this;
-        }
+        
         traverse(enter, reenter, end) {
             if (enter) { enter(this); }
             if (end) { end(this) }
@@ -1091,7 +1049,7 @@
                 }
             }
             if (changed) {
-                let rv = new FunN(fun.name, fun.imp, fun.absfun, newargs).setState(fun.state).setDepth();
+                let rv = new FunN(fun.name, fun.imp, newargs).setState(fun.state).setDepth();
                 rv.type = fun.type;
                 rv.returntype = fun.returntype;
                 rv.typeargs = fun.typeargs;
@@ -1113,7 +1071,7 @@
                 }
             }
             if (changed) {
-                let rv = new pFunN(pfun.name, pfun.impP, pfun.abstractP, newargs, pfun.param).setState(pfun.state).setDepth();
+                let rv = new pFunN(pfun.name, pfun.impP, newargs, pfun.param).setState(pfun.state).setDepth();
                 rv.type = fun.type;
                 rv.returntype = fun.returntype;
                 rv.typeargs = fun.typeargs;
@@ -1286,7 +1244,7 @@
                     }
                     
                     if (changed) {                        
-                        return newargs.map((pfunargs) => new FunN(fun.name, fun.imp, fun.abstract, pfunargs).setDepth());
+                        return newargs.map((pfunargs) => new FunN(fun.name, fun.imp,  pfunargs).setDepth());
                     } else {
                         return [fun];
                     }
@@ -1324,7 +1282,7 @@
                     }
                     
                     if (changed) {
-                        return newargs.map((pfunargs) => new pFunN(pfun.name, pfun.impP, pfun.abstractP, pfunargs, pfun.param).setDepth())                       ;
+                        return newargs.map((pfunargs) => new pFunN(pfun.name, pfun.impP, pfunargs, pfun.param).setDepth())                       ;
                     } else {
                         return [pfun];
                     }
@@ -1530,10 +1488,10 @@
                 return new LambdaN(new Hole());
             }
             if (instance instanceof pFunN) {
-                return new pFunN(instance.name, instance.impP, instance.abstractP, instance.args.map((arg) => new Hole()), instance.param);
+                return new pFunN(instance.name, instance.impP,  instance.args.map((arg) => new Hole()), instance.param);
             }
             if (instance instanceof FunN) {
-                return new FunN(instance.name, instance.imp, instance.absfun, instance.args.map((arg) => new Hole()));
+                return new FunN(instance.name, instance.imp, instance.args.map((arg) => new Hole()));
             }
             return instance;
         }
@@ -1663,7 +1621,7 @@
                     this.instance = this.result.construct;
                     let newargs = myfun(); //This just jumps to the this.mode == 'replace' branch
                     let argArray = mapToArray(newargs, this.newComponent.nargs);
-                    let rv = new FunN(this.newComponent.name, this.newComponent.imp, undefined, argArray);
+                    let rv = new FunN(this.newComponent.name, this.newComponent.imp,  argArray);
                     let returntype = elem.type;
                     let typeargs = argArray.map(arg => arg.type);
                     let type = typeargs.reduceRight((type, arg) => new FunctionType(arg, type), returntype);
@@ -2056,10 +2014,10 @@
             if (prog.kind == 'fun') {
                 let comp = langMap[prog.name];
                 if (comp.parametric) {
-                    rv = new pFunN(prog.name, comp.imp, comp.abstract, prog.args.map((arg) => deserialize(arg, langMap)), prog.param);
+                    rv = new pFunN(prog.name, comp.imp,  prog.args.map((arg) => deserialize(arg, langMap)), prog.param);
 
                 } else {
-                    rv = new FunN(prog.name, comp.imp, comp.abstract, prog.args.map((arg) => deserialize(arg, langMap)));
+                    rv = new FunN(prog.name, comp.imp,  prog.args.map((arg) => deserialize(arg, langMap)));
                 }
             }
             else if (prog.kind == 'lambda') {
@@ -2157,7 +2115,7 @@
             let name = rv.name;
             if (name in this.renames) { 
                 let fun = rv;
-                rv = new FunN(this.renames[name].name, rv.imp, rv.absfun, rv.args).setState(rv.state).setDepth();
+                rv = new FunN(this.renames[name].name, rv.imp,  rv.args).setState(rv.state).setDepth();
                 rv.type = fun.type;
                 rv.returntype = fun.returntype;
                 rv.typeargs = fun.typeargs;
@@ -2535,9 +2493,9 @@
                     let rv;
                     if (construct.parametric) {
                         let param = construct.paramInit();
-                        rv = new pFunN(construct.name, construct.imp, construct.abstract, args, param);
+                        rv = new pFunN(construct.name, construct.imp,  args, param);
                     } else {
-                        rv = new FunN(construct.name, construct.imp, construct.abstract, args);
+                        rv = new FunN(construct.name, construct.imp,  args);
                     }
                     
                     if (!tc.addConstraint(expectedType, construct.returntype, rv.id)) {
@@ -3056,9 +3014,9 @@
                         if (changed) {
                             let rv;
                             if (node.isParametric()) {
-                                rv = (new pFunN(node.name, node.impP, node.absfunP, newargs, node.param));
+                                rv = (new pFunN(node.name, node.impP, newargs, node.param));
                             } else {
-                                rv = (new FunN(node.name, node.imp, node.absfun, newargs));
+                                rv = (new FunN(node.name, node.imp, newargs));
                             }
                             if (newargs.length == 0) {
                                 rv.childstate = st.transition(node.state, rv, 0);
