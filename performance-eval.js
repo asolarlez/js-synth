@@ -1,4 +1,20 @@
-// This file imports synlib.js and then invokes the run method.
+/**
+ * Performance Evaluation Script for js-synth
+ * 
+ * This script runs comprehensive performance evaluations across all three
+ * domain-specific languages (Simple Map, String, and CSG) to measure synthesis
+ * success rates and computational costs.
+ * 
+ * USAGE:
+ *   node performance-eval.js [number_of_runs]
+ * 
+ * PARAMETERS:
+ *   number_of_runs (optional): Number of experimental runs per language (default: 30)
+ * 
+ * WHAT IT DOES:
+ *   Runs synthesis experiments on all problems in each language, and collects performance 
+ *   metrics for each problem and outputs aggregate statistics.
+ */
 
 // Import the synlib module
 import { runAll as runAllSimpl } from './languages/simplmaplang.js';

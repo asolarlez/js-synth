@@ -48,11 +48,6 @@ let strlanguage = [
             return function () {                
                 return param;
             }
-        },
-        abstract: function (param) {
-            return function (input) {
-                return param;
-            }
         }
     }
     ,{
@@ -80,43 +75,6 @@ let strlanguage = [
                 return rvError(4);
             }
             return substrBody(startA, startB, endA, endB, idx, input);
-        },
-        abstract: function (startA, startB, endA, endB, idx, input) {
-            let hasHoles = false;
-            if (isHole(input)) {
-                hasHoles = true;
-            }else if (typeof (input) != 'string') {
-                return rvError(5);
-            }
-            if (isHole(startA)) {
-                hasHoles = true;
-            }else if (!(startA instanceof RegExp)) {
-                return rvError(0);
-            }
-            if (isHole(startB)) {
-                hasHoles = true;
-            }else if (!(startB instanceof RegExp)) {
-                return rvError(1);
-            }
-            if (isHole(endA)) {
-                hasHoles = true;
-            } else if (!(endA instanceof RegExp)) {
-                return rvError(2);
-            }
-            if (isHole(endB)) {
-                hasHoles = true;
-            } else if (!(endB instanceof RegExp)) {
-                return rvError(3);
-            }
-            if (isHole(idx)) {
-                hasHoles = true;
-            } else if (typeof (idx) != 'number') {
-                return rvError(4);
-            }
-            if (hasHoles) {
-                return makeHole();
-            }
-            return substrBody(startA, startB, endA, endB, idx, input);
         }
     },
     {
@@ -130,23 +88,6 @@ let strlanguage = [
             }
             if (typeof (b) != 'string') {
                 return rvError(1);
-            }
-            return a + b;
-        },
-        abstract: function (a, b) {
-            let hasHoles = false;
-            if (isHole(a)) {
-                hasHoles = true;
-            } else if (typeof (a) != 'string') {
-                return rvError(0);
-            }
-            if (isHole(b)) {
-                hasHoles = true;
-            } else if (typeof (b) != 'string') {
-                return rvError(1);
-            }
-            if (hasHoles) {
-                return "  ";
             }
             return a + b;
         }

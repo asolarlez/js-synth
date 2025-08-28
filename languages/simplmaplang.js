@@ -38,47 +38,6 @@ let maplanguage = [
                 }
             }
             return rv;
-        },
-        abstract: function (lst, f) {
-            if (isHole(lst)) {
-                if (lst.type && lst.type.t != "lst") {
-                    return rvError(0);
-                }
-                if (isHole(f)) {
-                    if (f.type && f.type.t != "fun") {
-                        return rvError(1);
-                    }
-                } else {
-                    if (!(f instanceof Function)) {
-                        return rvError(1);
-                    }
-                }
-                return lst;
-            } else {
-                if (!(lst instanceof Array)) {
-                    return rvError(0);
-                }
-            }
-            if (isHole(f)) {
-                if (f.type && f.type.t != "fun") {
-                    return rvError(1);
-                }
-                return lst.map((r) => makeHole());
-            } else {
-                if (!(f instanceof Function)) {
-                    return rvError(1);
-                }
-            }
-            let rv = lst.map(f);
-            for (let elem of rv) {
-                if (isError(elem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(elem)) {
-                    return elem;
-                }
-            }
-            return rv;
         }
     }
     ,
@@ -93,62 +52,6 @@ let maplanguage = [
             }
             if (!(f instanceof Function)) {
                 return rvError(1);
-            }
-            let acc = init;
-            for (let elem of lst) {
-                let skolem = f(elem);
-                if (isError(skolem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(skolem)) {
-                    return skolem;
-                }
-                if (!(skolem instanceof Function)) {
-                    return rvError(1);
-                }
-                acc = skolem(acc);
-                if (isError(acc)) {
-                    return rvError(1);
-                }
-                if (isBadResult(acc)) {
-                    return acc;
-                }
-            }
-            return acc;
-        },
-        abstract: function (lst, f, init) {
-            if (isHole(lst)) {
-                if (lst.type && lst.type.t != "lst") {
-                    return rvError(0);
-                }
-                if (lst.type && lst.type.t == "lst" && (f instanceof Function)) {
-                    return f(makeHole(lst.type.rec), init);
-                }
-
-                if (isHole(f)) {
-                    if (f.type && f.type.t != "fun") {
-                        return rvError(1);
-                    }
-                } else {
-                    if (!(f instanceof Function)) {
-                        return rvError(1);
-                    }
-                }
-                return makeHole();
-            } else {
-                if (!(lst instanceof Array)) {
-                    return rvError(0);
-                }
-            }
-            if (isHole(f)) {
-                if (f.type && f.type.t != "fun") {
-                    return rvError(1);
-                }
-                return makeHole();
-            } else {
-                if (!(f instanceof Function)) {
-                    return rvError(1);
-                }
             }
             let acc = init;
             for (let elem of lst) {
@@ -188,50 +91,6 @@ let maplanguage = [
             }
             if (!(typeof (b) == 'number')) {
                 return rvError(2);
-            }
-            return c * a + b;
-        },
-        abstract: function (c, a, b) {
-            let hasHole = false;
-            if (isHole(c)) {
-                if (c.type) {
-                    if (c.type.t != "int") {
-                        return rvError(0);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (c) == 'number')) {
-                    return rvError(0);
-                }
-            }
-
-            if (isHole(a)) {
-                if (a.type) {
-                    if (a.type.t != "int") {
-                        return rvError(1);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (a) == 'number')) {
-                    return rvError(1);
-                }
-            }
-            if (isHole(b)) {
-                if (b.type) {
-                    if (b.type.t != "int") {
-                        return rvError(2);
-                    }
-                }
-                hasHole = true;
-            } else {
-                if (!(typeof (b) == 'number')) {
-                    return rvError(2);
-                }
-            }
-            if (hasHole) {
-                return makeHole({ t: "int" });
             }
             return c * a + b;
         }
