@@ -1,5 +1,5 @@
 import { synthesize, isHole, makeHole, score,
-     rvError, isError, isBadResult, Tp } from '../synlib.js';
+     rvError, isError, isBadResult, Tp } from '../src/synlib.js';
 
 
 function substrBody(startA, startB, endA, endB, idx, input) {

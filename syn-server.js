@@ -1,5 +1,5 @@
 import express from 'express';
-import { synthesize, deserializeState, deserializeType } from './synlib.js';
+import { synthesize, deserializeState, deserializeType } from './src/synlib.js';
 import zlib from 'zlib';
 import { promisify } from 'util';
 

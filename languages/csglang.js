@@ -1,4 +1,4 @@
-import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult, Tp } from '../synlib.js';
+import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult, Tp } from '../src/synlib.js';
 
 
 function unionHelper(sh1, sh2) {

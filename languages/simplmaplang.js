@@ -1,5 +1,5 @@
 import { synthesize, isHole, makeHole, score, numscore, rvError, isError, 
-    isBadResult, Tp, deserializeState } from '../synlib.js';
+    isBadResult, Tp, deserializeState } from '../src/synlib.js';
 
 /**
  * 

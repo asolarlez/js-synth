@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { deserializeState } from './synlib.js';
+import { deserializeState } from './src/synlib.js';
 import zlib from 'zlib';
 import { promisify } from 'util';
 
