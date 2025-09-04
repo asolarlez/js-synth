@@ -5,8 +5,22 @@ import { componentize } from './librarylearning.js';
 import { Primitive, TypeChecker } from './types.js';
 import { Error, BadResult, isBadResult, isError, badResult, rvError, log } from './util.js';
 
-export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, randomAndHillClimb, randomRandom, fancyRandClone, synthesize, rvError, isError, isBadResult, score, numscore };
+export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, randomAndHillClimb, randomRandom, fancyRandClone, synthesize, rvError, isError, isBadResult, score, numscore, testProg };
 
+function testProg(prog, examples, bound, config, st) {
+    let out = runOrLocalize(examples, prog, bound);
+    if (isBadResult(out)) {
+        console.log("BAD RESULT for prog:", prog.print());
+        throw "Should never happen";
+    }
+    let score = config.scoreOutputs(examples, out);
+    if (typeof score !== 'number' || isNaN(score)) {
+        throw new globalThis.Error(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
+    }
+    // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
+    st.scoreTree(prog, (1 - score) * 100);
+    return score;
+}
 
 class SynthesizerState {
     constructor(beamsize) {
@@ -540,21 +554,6 @@ function smcSynth(language, examples, bound, budget, outType, state, config) {
     
     let totalScore = 0;
 
-    function testProg(prog) {
-
-        let out = runOrLocalize(examples, prog, bound);
-        if (isBadResult(out)) {
-            console.log(prog.print());
-            throw "Should never happen";
-        }
-        let score = config.scoreOutputs(examples, out);
-        if (typeof score !== 'number' || isNaN(score)) {
-            throw new globalThis.Error("invalid score: " + score);
-        }
-        st.scoreTree(prog, (1 - score) * 100);
-        return score;
-    }
-
     function mass(score) {
         return Math.exp(-3 * score);
     }
@@ -564,7 +563,7 @@ function smcSynth(language, examples, bound, budget, outType, state, config) {
         state.populate((i) => {
             tc.reset();
             let newprog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
-            score = testProg(newprog);
+            score = testProg(newprog, examples, bound, config, st);
             totalScore += mass(score);
             return { prog: newprog, score: score };
         });
@@ -614,7 +613,7 @@ function smcSynth(language, examples, bound, budget, outType, state, config) {
                 console.log("randomAndHillClimb1 FAILED")
                 return adjusted;
             }
-            score = testProg(adjusted);                    
+            score = testProg(adjusted, examples, bound, config, st);                    
             totalScore += mass(score);
             state.updateBest(score, adjusted);
             
@@ -657,21 +656,6 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
     let rejuvenate = -1;
     let compStep = 10000;
 
-    function testProg(prog) {
-
-        let out = runOrLocalize(examples, prog, bound);
-        if (isBadResult(out)) {
-            console.log("BAD RESULT for prog:", prog.print());
-            throw "Should never happen";
-        }
-        let score = config.scoreOutputs(examples, out);
-        if (typeof score !== 'number' || isNaN(score)) {
-            throw new globalThis.Error(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
-        }
-        // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
-        st.scoreTree(prog, (1 - score) * 100);
-        return score;
-    }
 
     let score; 
     if (!state) {
@@ -680,7 +664,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
         state.populate((i) => {
             tc.reset();
             let newprog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
-            score = testProg(newprog);
+            score = testProg(newprog, examples, bound, config, st);
             return { prog: newprog, score: score };
         });
         budget -= state.beamsize;
@@ -735,7 +719,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
                 console.log("randomAndHillClimb1 FAILED")
                 return;
             }
-            score = testProg(adjusted);
+            score = testProg(adjusted, examples, bound, config, st);
             
             log(3, "After mod ", ()=>adjusted.print(), "score", score);
             //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
@@ -754,7 +738,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
                 console.log("randomAndHillClimb1 FAILED")
                 return;
             }
-            score = testProg(adjusted);                    
+            score = testProg(adjusted, examples, bound, config, st);                    
             log(3, "After mod ", ()=>adjusted.print(), "score", score);
             if (score < state.workList[idx].score) {// good. The new program is better than the old one. replace
                 state.workList[idx] = { prog: adjusted, score: score };
@@ -785,7 +769,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
                     console.log("randomAndHillClimb1 FAILED")
                     return;
                 }
-                score = testProg(adjusted);
+                score = testProg(adjusted, examples, bound, config, st);
                 state.workList[i] = { prog: adjusted, score: score };
             }
             state.workList.sort((a, b) => quant(a) - quant(b));   
