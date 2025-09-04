@@ -1,5 +1,4 @@
 ﻿
-
 let verbosity = 0;
 
 function log(level, msg1, msg2, msg3, msg4) {
@@ -11,27 +10,6 @@ function log(level, msg1, msg2, msg3, msg4) {
         console.log(msg1, msg2, msg3, msg4);
     }
 }
-
-
-let randstate = 2;
-
-function debugRandom() {
-    //randstate += 811;
-    //randstate = randstate % 1091;
-    //let rv = (randstate) / 1091;
-    //console.log(rv);
-    randstate = Math.sin(randstate) * 5000;
-    let rv = randstate - Math.floor(randstate);
-    //console.log(rv);
-    return rv;
-}
-
-//Math.random = debugRandom;
-
-
-let NOVALUE = "NOVAL@#";
-
-
 
 class Type {
     constructor(kind) {

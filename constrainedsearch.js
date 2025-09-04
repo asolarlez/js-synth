@@ -4,6 +4,8 @@
  * 
  */
 
+let NOVALUE = "NOVAL@#";
+
 class ConstraintChecker {
     constructor() {
         this.constraints = {};
