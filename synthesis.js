@@ -1,47 +1,11 @@
 import { StatsTracker } from './stats.js';
-import { FunctionReplacer } from './exprs.js';
+import { FunctionReplacer, FunN, pFunN, LambdaN, InputN, IntN, deBroujin, HOLE } from './exprs.js';
 import { deserializeComponent, deserializeProg } from './deserialize.js';
 import { componentize } from './librarylearning.js';
+import { Primitive, TypeChecker } from './types.js';
+import { Error, BadResult, isBadResult, isError, badResult, rvError, log } from './util.js';
 
 export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, randomAndHillClimb, randomRandom, fancyRandClone, synthesize, rvError, isError, isBadResult, score, numscore };
-
-
-class Error {
-    constructor(narg) {
-        this.narg = narg;
-    }
-    toString() {
-        return "Error(" + this.narg + ")";
-    }
-}
-
-class BadResult {
-    constructor(parent, parent_idx, main, child_idx, level, envt) {
-        this.parent = parent;
-        this.parent_idx = parent_idx;
-        this.main = main;
-        this.child_idx = child_idx;
-        this.level = level;
-        this.envt = envt;
-    }
-}
-
-
-function isBadResult(res) {
-    return res instanceof BadResult;
-}
-
-function isError(res) {
-    return res instanceof Error;
-}
-
-function badResult(parent, parent_idx, child, child_idx, level, envt) {
-    return new BadResult(parent, parent_idx, child, child_idx, level, envt);
-}
-
-function rvError(child_id) {
-    return new Error(child_id);
-}
 
 
 class SynthesizerState {

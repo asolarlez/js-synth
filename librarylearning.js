@@ -2,7 +2,7 @@ import { Tp, TypeVar, Primitive, FunctionType, TypeChecker } from './types.js';
 import { ASTVisitor, FunN, pFunN, LambdaN, isHole, Plug, AST } from './exprs.js';
 
 
-export { stitch, componentize };
+export { stitch, componentize, stateToStr, nextStateToStr, getLabel };
 
 
 function stitch(programs, language) {

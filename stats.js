@@ -1,4 +1,6 @@
 
+import { stateToStr, nextStateToStr, getLabel } from './librarylearning.js';
+
 export { StatsTracker };
 
 class StatsTracker {

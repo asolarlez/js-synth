@@ -1,6 +1,7 @@
 import { Tp, TypeVar, Primitive, FunctionType, TypeChecker } from './types.js';
+import { isBadResult, badResult, rvError, isError } from './util.js';
 
-export { ASTVisitor, FunN, pFunN, LambdaN, Hole, Plug, AST, FunctionReplacer, isHole, makeHole };
+export { ASTVisitor, FunN, pFunN, LambdaN, InputN, IntN, deBroujin, Hole, Plug, AST, FunctionReplacer, isHole, makeHole, HOLE };
 
 
 let INSTID = 0;
