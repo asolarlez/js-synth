@@ -1,7 +1,15 @@
 
-import { stateToStr, nextStateToStr, getLabel } from './librarylearning.js';
+import { getLabel } from './librarylearning.js';
 
-export { StatsTracker };
+export { StatsTracker, stateToStr, nextStateToStr };
+
+function stateToStr(state) {
+    return state.depth + ":" + state.grandpa + ":" + state.parentIdx + ":" + state.parent;
+}
+
+function nextStateToStr(state, node) {
+    return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node);
+}
 
 class StatsTracker {
     constructor(serialized) {

@@ -2,7 +2,7 @@ import { Tp, TypeVar, Primitive, FunctionType, TypeChecker } from './types.js';
 import { ASTVisitor, FunN, pFunN, LambdaN, isHole, Plug, AST } from './exprs.js';
 
 
-export { stitch, componentize, stateToStr, nextStateToStr, getLabel };
+export { stitch, componentize, getLabel };
 
 
 function stitch(programs, language) {
@@ -606,10 +606,3 @@ function getLabel(node, stage) {
     return kind;
 }
 
-function stateToStr(state) {
-    return state.depth + ":" + state.grandpa + ":" + state.parentIdx + ":" + state.parent;
-}
-
-function nextStateToStr(state, node) {
-    return (state.depth + 1) + ":" + state.parent + ":" + state.idx + ":" + getLabel(node);
-}
