@@ -31,7 +31,7 @@ function runExperiments() {
                 aggregated[name] = [];
             }
             aggregated[name].push(result[name]);
-        }        
+        }
     }
     for (let i = 0; i < Nruns; i++) {
         let simpRes = runAllSimpl();
@@ -43,8 +43,8 @@ function runExperiments() {
     }
     function printAggregateStats(aggregated) {
         for (let name in aggregated) {
-            let values = aggregated[name];            
-            let cost = values.reduce((a, b) => b.cost + a, 0);            
+            let values = aggregated[name];
+            let cost = values.reduce((a, b) => b.cost + a, 0);
             let corrects = values.reduce((a, b) => (b.status == "CORRECT" ? 1 : 0) + a, 0);
             let avgCost = cost / values.length;
             let fracCorrect = corrects / values.length;
@@ -53,7 +53,7 @@ function runExperiments() {
 
         console.log("experiment = {");
         for (let name in aggregated) {
-            let values = aggregated[name];   
+            let values = aggregated[name];
             let sorted = values.map((a) => a.cost).sort((a, b) => a - b);
             console.log(`  "${name}": [${sorted}],`);
         }

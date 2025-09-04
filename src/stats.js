@@ -17,7 +17,7 @@ class StatsTracker {
             this.tracker = serialized.tracker;
         } else {
             this.tracker = {};
-        }            
+        }
         this.policyCache = {};
     }
     resetPolicyCache() {
@@ -29,13 +29,13 @@ class StatsTracker {
         if (idx == initial) {
             //This means we have wrapped around and we are done.
             return undefined;
-        } else {                
+        } else {
             return idx >= language.length ? extras[idx - language.length] : language[idx];
         }
     }
 
     randomConstruct(state, language, extras) {
-        
+
         let key = stateToStr(state);
         let pckey = key + ":" + state.idx;
         function uniform() {
@@ -47,11 +47,11 @@ class StatsTracker {
             return idx >= language.length ? extras[idx - language.length] : language[idx];
         }
 
-        
+
         let total;
         let scores;
         let tmp = this.policyCache[pckey];
-        if (tmp) {                
+        if (tmp) {
             total = tmp.total;
             scores = tmp.scores;
             let el = 0;
@@ -59,15 +59,15 @@ class StatsTracker {
                 el = extras.length;
                 if (scores.length < language.length + el) {
                     scores = this.succScores(state, language, extras);
-                    total = scores[scores.length-1];
+                    total = scores[scores.length - 1];
                     if (total == 0) {
                         return uniform();
-                    }                        
+                    }
                     this.policyCache[pckey] = { scores: scores, total: total };
-                }                        
+                }
             }
             if (scores.length > language.length + el) {
-                total = scores[language.length + el-1];                    
+                total = scores[language.length + el - 1];
             }
         } else {
             let tstate;
@@ -81,19 +81,19 @@ class StatsTracker {
             total = scores[scores.length - 1];
             if (total == 0) {
                 return uniform();
-            }                
+            }
             this.policyCache[pckey] = { scores: scores, total: total };
         }
 
-        let rnd = Math.random()*total;            
+        let rnd = Math.random() * total;
         let i = 0;
-        for (i = 0; i < language.length; ++i) {                
+        for (i = 0; i < language.length; ++i) {
             if (scores[i] > rnd) {
                 return language[i];
             }
         }
         if (extras) {
-            for (let j = 0; j < extras.length; ++j) {                                        
+            for (let j = 0; j < extras.length; ++j) {
                 if (scores[i] > rnd) {
                     return extras[j];
                 }
@@ -101,7 +101,7 @@ class StatsTracker {
             }
         }
         console.log("WTF!!!!");
-        
+
     }
 
     succScores(state, language, extras) {
@@ -117,18 +117,18 @@ class StatsTracker {
         }
         let zeroR = rescale(0);
         for (let i = 0; i < language.length; ++i) {
-            let construct = language[i];                
+            let construct = language[i];
             let totreward = 0;
             let key = nextStateToStr(state, construct);
             let tstate = this.tracker[key];
-            
+
             if (tstate) {
                 totreward = rescale(tstate.reward);
             } else {
                 totreward = zeroR;
-            }               
+            }
             total += totreward;
-            rv[rvidx] = total; ++rvidx;                
+            rv[rvidx] = total; ++rvidx;
         }
         if (extras) {
             for (let i = 0; i < extras.length; ++i) {
@@ -138,22 +138,22 @@ class StatsTracker {
                 let totreward = 0;
                 if (tstate) {
                     totreward = rescale(tstate.reward);
-                }else {
+                } else {
                     totreward = zeroR;
-                } 
+                }
                 total += totreward;
                 rv[rvidx] = total; ++rvidx;
             }
-        }            
+        }
         return rv;
 
     }
 
     startState() {
-        return { parent: "START", parentIdx: 0 , grandpa: "", idx: 0, depth: 0 };
+        return { parent: "START", parentIdx: 0, grandpa: "", idx: 0, depth: 0 };
     }
     trackAction(state, node) {
-        
+
     }
     transition(state, node, childidx) {
         childidx = childidx || 0;
@@ -164,7 +164,7 @@ class StatsTracker {
     failedAction(state, action) {
         //console.log(stateToStr(state), getLabel(action));
     }
-    scoreTree(node, score) {        
+    scoreTree(node, score) {
         if (score <= 0) { return; }
         let tracker = this.tracker;
         function scoreF(key) {
@@ -173,7 +173,7 @@ class StatsTracker {
                 if (score > q.reward) {
                     q.reward = score;
                 }
-                    // q.reward =  (q.reward * q.scores + score) / (q.scores + 1);
+                // q.reward =  (q.reward * q.scores + score) / (q.scores + 1);
                 q.scores++;
             } else {
                 let tr = {
@@ -192,6 +192,6 @@ class StatsTracker {
         });
     }
     failedState(state) {
-        return;            
+        return;
     }
 }

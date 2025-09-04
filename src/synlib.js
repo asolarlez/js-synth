@@ -18,4 +18,4 @@ export {
     Tp,
     deserializeState,
     deserializeType
-    };
+};

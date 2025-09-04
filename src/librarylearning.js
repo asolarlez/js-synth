@@ -6,7 +6,7 @@ export { stitch, componentize, getLabel };
 
 
 function stitch(programs, language) {
-    
+
     function growCandidate(candidate) {
         let tmpPrograms = candidate.instances.slice(0);
         //After calling thre grow visitor, the newInstancesIdx index maps each label to an outId that is an index inside newProgs returned 
@@ -40,7 +40,7 @@ function stitch(programs, language) {
                         newarg = [fun.args[i]];
                     } else {
                         newarg = fun.args[i].accept(this);
-                    }                        
+                    }
                     if (newargs.length == 0) {
                         for (let j = 0; j < newarg.length; ++j) {
                             if (newarg[j] != fun.args[i]) { changed = true; }
@@ -58,9 +58,9 @@ function stitch(programs, language) {
                     }
                     tmpPrograms = local.slice(0);
                 }
-                
-                if (changed) {                        
-                    return newargs.map((pfunargs) => new FunN(fun.name, fun.imp,  pfunargs).setDepth());
+
+                if (changed) {
+                    return newargs.map((pfunargs) => new FunN(fun.name, fun.imp, pfunargs).setDepth());
                 } else {
                     return [fun];
                 }
@@ -79,26 +79,26 @@ function stitch(programs, language) {
                         newarg = [fun.args[i]];
                     } else {
                         newarg = fun.args[i].accept(this);
-                    } 
+                    }
                     if (newargs.length == 0) {
                         for (let j = 0; j < newarg.length; ++j) {
                             if (newarg[j] != pfun.args[i]) { changed = true; }
                             newargs.push([newarg[j]]);
                         }
                     } else {
-                        let tmp = [];                            
+                        let tmp = [];
                         for (let j = 0; j < newarg.length; ++j) {
                             if (newarg[j] != pfun.args[i]) { changed = true; }
-                            for (let t = 0; t < newargs.length; ++t) {                                    
-                                tmp.push(newargs[t].concat([newarg[j]]));                                    
+                            for (let t = 0; t < newargs.length; ++t) {
+                                tmp.push(newargs[t].concat([newarg[j]]));
                             }
                         }
-                    }                       
+                    }
                     tmpPrograms = local;
                 }
-                
+
                 if (changed) {
-                    return newargs.map((pfunargs) => new pFunN(pfun.name, pfun.impP, pfunargs, pfun.param).setDepth())                       ;
+                    return newargs.map((pfunargs) => new pFunN(pfun.name, pfun.impP, pfunargs, pfun.param).setDepth());
                 } else {
                     return [pfun];
                 }
@@ -111,7 +111,7 @@ function stitch(programs, language) {
                 // tmpPrograms has a list of current nodes in each instance of the original candidate. We need to group them into distinct indexes.                     
                 let newNodes = [];
                 let hasPlug = false;
-                if(this.lastParent.kind != 'lambda'){
+                if (this.lastParent.kind != 'lambda') {
                     //It is undesirable to have a plug as the only child of a lambda; it generally just leads to a bad component. 
                     //So we only add if the lastParent is not a lambda, meaning there has to be a function node between the lambda
                     //and the plug.
@@ -119,18 +119,18 @@ function stitch(programs, language) {
                     newNodes.push(new Plug());
                     hasPlug = true;
                 }
-                
+
                 for (let idx in tmpPrograms) {
                     let node = tmpPrograms[idx];
-                    let label = getLabel(node);   
+                    let label = getLabel(node);
                     //Only add idx to plug if the node has no unbound deBroujin indices.
                     if (node.dbidx == -1 && hasPlug) {
                         newInstanceIdx["plug"].lst.push(idx);
-                    }                        
+                    }
                     if (label in newInstanceIdx) {
-                        newInstanceIdx[label].lst.push(idx);                            
+                        newInstanceIdx[label].lst.push(idx);
                     } else {
-                        newInstanceIdx[label] = { outId:newNodes.length, lst: [idx]};
+                        newInstanceIdx[label] = { outId: newNodes.length, lst: [idx] };
                         newNodes.push(newWithHoles(node));
                     }
                 }
@@ -151,7 +151,7 @@ function stitch(programs, language) {
                     } else {
                         return lambda;
                     }
-                });                    
+                });
             }
             visitInput(input) { return [input]; }
             visitIndex(index) {
@@ -172,7 +172,7 @@ function stitch(programs, language) {
                 this.N = matches.length;
             }
             visitFun(fun) {
-                let prevMatches = this.matches;                    
+                let prevMatches = this.matches;
                 let scoreBound = 0;
                 for (let idx in fun.args) {
                     this.matches = [];
@@ -192,7 +192,7 @@ function stitch(programs, language) {
                 plug.scoreBound = 0;
             }
             visitHole(hole) {
-                let prevMatches = this.matches;  
+                let prevMatches = this.matches;
                 let scoreBound = 0;
                 for (let i = 0; i < prevMatches.length; ++i) {
                     scoreBound += prevMatches[i].size;
@@ -202,8 +202,8 @@ function stitch(programs, language) {
             visitInt(intn) { intn.scoreBound = this.N; }
             visitIndex(index) { index.scoreBound = this.N; }
             visitInput(input) { input.scoreBound = this.N; }
-            visitLambda(lambda) { 
-                let prevMatches = this.matches;  
+            visitLambda(lambda) {
+                let prevMatches = this.matches;
                 this.matches = [];
                 for (let i = 0; i < prevMatches.length; ++i) {
                     this.matches.push(prevMatches[i].body);
@@ -236,13 +236,13 @@ function stitch(programs, language) {
                     score: instances.length * component.size,
                     scoreBound: component.scoreBound
                 });
-            }                
+            }
         }
         if (rv.length == 0) {
             candidate.complete = true;
             return [candidate];
         }
-        return rv;  
+        return rv;
     }
 
     function collect(prog, construct) {
@@ -304,7 +304,7 @@ function stitch(programs, language) {
             return new LambdaN(new Hole());
         }
         if (instance instanceof pFunN) {
-            return new pFunN(instance.name, instance.impP,  instance.args.map((arg) => new Hole()), instance.param);
+            return new pFunN(instance.name, instance.impP, instance.args.map((arg) => new Hole()), instance.param);
         }
         if (instance instanceof FunN) {
             return new FunN(instance.name, instance.imp, instance.args.map((arg) => new Hole()));
@@ -333,16 +333,16 @@ function stitch(programs, language) {
                 wlist.push(inst);
             }
         }
-        
+
         return 0;
     }
 
     let worklist = [];
-    let componentIndex = {};        
+    let componentIndex = {};
     for (let construct of language) {
         let instances = programs.map((prog) => collect(prog, construct)).reduce((a, b) => a.concat(b), []);
         addToWorklist(worklist, instances);
-        if(construct.synthetic) {
+        if (construct.synthetic) {
             // If the construct is synthetic, we need to add it to the component index.
             componentIndex[construct.source.print()] = construct;
         };
@@ -351,19 +351,19 @@ function stitch(programs, language) {
     worklist.sort((a, b) => b.scoreBound - a.scoreBound);
     while (worklist.length > 0) {
         let newWL = worklist.map((elem) => growCandidate(elem)).reduce((a, b) => a.concat(b), []);
-        
+
         newWL.sort((a, b) => b.score - a.score);
         //Filter out any candidate that already exists in componentIndex.
         newWL = newWL.filter((elem) => !(elem.construct.print() in componentIndex));
-        
+
         let newWL2 = newWL.filter((elem) => (elem.scoreBound != elem.score || elem.size > 1) && elem.count > 1);
-        if(newWL2.length == 0 ) {
+        if (newWL2.length == 0) {
             return undefined; // No more candidates to grow.
         }
         // Filter out anything whose scoreBound is less than the best score so far.
         let bestScore = newWL2[0].score;
         worklist = newWL2.filter((elem) => elem.scoreBound >= bestScore && elem.count > 1);
-        if(worklist.length == 0 ) {
+        if (worklist.length == 0) {
             return undefined; // No more candidates to grow.
         }
         //let num = 3;
@@ -381,7 +381,7 @@ function stitch(programs, language) {
         }
     }
 
-    return worklist[0];          
+    return worklist[0];
 
 }
 
@@ -389,7 +389,7 @@ function stitch(programs, language) {
 function componentize(workList, language, st) {
     let result = stitch(workList.map((elem) => elem.prog), language);
     if (!result) {
-        return { workList: workList, component:undefined };
+        return { workList: workList, component: undefined };
     }
     function bulkMapAdd(map1, map2) {
         for (let k in map2) {
@@ -399,7 +399,7 @@ function componentize(workList, language, st) {
     function mapToArray(map, n) {
         let rv = new Array(n);
         for (let i = 0; i < n; ++i) {
-            if(i in map) {
+            if (i in map) {
                 rv[i] = map[i];
             }
         }
@@ -437,7 +437,7 @@ function componentize(workList, language, st) {
                 this.instance = this.result.construct;
                 let newargs = myfun(); //This just jumps to the this.mode == 'replace' branch
                 let argArray = mapToArray(newargs, this.newComponent.nargs);
-                let rv = new FunN(this.newComponent.name, this.newComponent.imp,  argArray);
+                let rv = new FunN(this.newComponent.name, this.newComponent.imp, argArray);
                 let returntype = elem.type;
                 let typeargs = argArray.map(arg => arg.type);
                 let type = typeargs.reduceRight((type, arg) => new FunctionType(arg, type), returntype);
@@ -451,7 +451,7 @@ function componentize(workList, language, st) {
                     this.newComponent.returntype = returntype;
                     this.newComponent.typeargs = typeargs;
                 }
-                rv.type = returntype;                   
+                rv.type = returntype;
                 this.mode = 'search';
                 return rv;
             } else {
@@ -470,13 +470,13 @@ function componentize(workList, language, st) {
                     return rest();
                 } else {
                     return {};
-                }                    
+                }
             }
         }
         visitFun(fun) {
             if (this.mode == 'search') {
                 let _this = this;
-                return this.generalSearchMode(fun, () => _this.visitFun(fun), ()=>super.visitFun(fun));           
+                return this.generalSearchMode(fun, () => _this.visitFun(fun), () => super.visitFun(fun));
             } else {
                 return this.checkAndSetArg(fun, () => {
                     let args = fun.args;
@@ -489,7 +489,7 @@ function componentize(workList, language, st) {
                         this.instance = origInstance; //Reset the instance to the original component.
                     }
                     return rv;
-                });                    
+                });
             }
         }
         visitpFun(pfun) {
@@ -511,9 +511,9 @@ function componentize(workList, language, st) {
         }
         visitInput(input) {
             if (this.mode == 'search') {
-                return this.generalSearchMode(input, () => { return {}; } , () => input);
+                return this.generalSearchMode(input, () => { return {}; }, () => input);
             } else {
-                return this.checkAndSetArg(input);                    
+                return this.checkAndSetArg(input);
             }
         }
         visitIndex(index) {
@@ -540,9 +540,9 @@ function componentize(workList, language, st) {
     }
     function resetStates(prog) {
         // sets the state of every node.
-        let myState = st.startState();            
+        let myState = st.startState();
         prog.traverse((node) => {
-            node.setState(myState);                
+            node.setState(myState);
             if ((node.kind != 'fun' && node.kind != 'lambda') || (node.kind == 'fun' && node.args.length == 0)) {
                 node.childstate = st.transition(myState, node, 0);
             } else {
@@ -553,7 +553,7 @@ function componentize(workList, language, st) {
         }, (node) => {
             node.curChild++;
             myState = st.transition(node.state, node, node.curChild);
-        }, (node) => {     
+        }, (node) => {
             if ('curChild' in node) { delete node.curChild; }
             node.setDepth();
         });
@@ -563,7 +563,7 @@ function componentize(workList, language, st) {
     let imp = result.construct.accept(visitor);
     let name = "__foo" + language.length;
     let found = language.find((elem) => elem.name == name);
-    let i= language.length+1;
+    let i = language.length + 1;
     while (found) {
         name = "__foo" + i;
         ++i;
@@ -582,11 +582,11 @@ function componentize(workList, language, st) {
         pos: language.length,
         synthetic: true,
         source: result.construct
-    };        
+    };
     let replacer = new ComponentReplacer(result, langEntry);
     workList = workList.map((elem) => {
         return { prog: resetStates(elem.prog.accept(replacer)), score: elem.score }
-    });        
+    });
     workList.forEach((elem) => st.scoreTree(elem.prog, (1 - elem.score) * 100));
     st.resetPolicyCache();
     return { workList: workList, component: langEntry };

@@ -23,7 +23,7 @@ class Primitive extends Type {
         return this;
     }
     compatible(t) {
-        if(t instanceof Primitive) {
+        if (t instanceof Primitive) {
             return this.name == t.name;
         }
         if (t instanceof TypeVar) {
@@ -52,7 +52,7 @@ class TypeVar extends Type {
         } else {
             this.name = name;
         }
-        
+
 
         if (id != undefined) {
             this.id = id;
@@ -60,19 +60,19 @@ class TypeVar extends Type {
         }
         this.isFixed = false;
     }
-    toString() {                       
+    toString() {
         if ('id' in this) {
             return this.namewid;
         } else {
             return this.name;
-        }            
+        }
     }
     addId(id) {
         if ('id' in this) {
             return this;
         } else {
             return new TypeVar(this.name, id);
-        }            
+        }
     }
     replaceVar(f) {
         return f(this);
@@ -86,12 +86,12 @@ class TypeVar extends Type {
                 return alt.name == this.name && alt.id === this.id;
             } else {
                 return alt.name == this.name;
-            }                
+            }
         } else {
             //alt must be a string;               
             return alt == this.toString();
         }
-        
+
     }
     antiunify(other, state) {
         if (other instanceof TypeVar && other.name == this.name) {
@@ -113,7 +113,7 @@ class Parametric extends Type {
         this.name = name;
         this.params = params;
         let ifx = true;
-        for(let i=0; i<params.length; ++i){
+        for (let i = 0; i < params.length; ++i) {
             ifx = ifx && params[i].isFixed;
         }
         this.isFixed = ifx; //parametric types are fixed if all their parameters are fixed.
@@ -136,7 +136,7 @@ class Parametric extends Type {
         for (let i = 0; i < this.params.length; ++i) {
             let p = this.params[i].addId(id);
             np.push(p);
-            if(p != this.params[i]) {
+            if (p != this.params[i]) {
                 changed = true;
             }
         }
@@ -147,14 +147,14 @@ class Parametric extends Type {
         }
     }
     replaceVar(f) {
-        if(this.params.length == 1) {
+        if (this.params.length == 1) {
             let p = this.params[0].replaceVar(f);
             if (p != this.params[0]) {
                 return new Parametric(this.name, [p]);
             } else {
                 return this;
             }
-        }else{                
+        } else {
             let np = [];
             let changed = false;
             for (let i = 0; i < this.params.length; ++i) {
@@ -263,7 +263,7 @@ function parseType(str) {
         } else {
             throw "Expected " + token + " but got " + str;
         }
-    }        
+    }
     function parseName(str) {
         //check if it's a primitive or a type var and then return either [Primitive, rest] or [TypeVar, rest]]
         let rv = str.match(/^[a-zA-Z]+/);
@@ -275,7 +275,7 @@ function parseType(str) {
             return [new TypeVar(rv[0]), str.substring(rv[0].length).trim()];
         } else {
             throw "Expected a type name or a type variable but got " + str;
-        }            
+        }
     }
 
     str = str.trim();
@@ -303,7 +303,7 @@ function parseType(str) {
             type = new Parametric(type.name, params);
         }
     }
-    if(str[0] == "-") {
+    if (str[0] == "-") {
         str = consume("->", str);
         let res = parseType(str);
         type = new FunctionType(type, res[0]);
@@ -358,7 +358,7 @@ class TypeChecker {
         }
         if (node.type) {
             return expectedType.compatible(node.type);
-        }            
+        }
         return true;
     }
 
@@ -370,7 +370,7 @@ class TypeChecker {
      * @returns
      */
     convert(type, id, limit) {
-        if(type.isFixed){ return type; } //If the type is fixed, we don't need to convert it.
+        if (type.isFixed) { return type; } //If the type is fixed, we don't need to convert it.
         if (limit == undefined) { limit = 20; }
         if (limit <= 0) {
             throw "Too much";
@@ -380,11 +380,11 @@ class TypeChecker {
             let ts = t.toString();
             let converted = this.constraints.get(ts);
             if (converted) {
-                return this.convert(converted, undefined, limit-1);
+                return this.convert(converted, undefined, limit - 1);
             } else {
                 return t;
             }
-        });            
+        });
     }
     /**
      * This function is similar to convert, but it assumes that the type variables aready have their id set. 
@@ -395,27 +395,27 @@ class TypeChecker {
      * @returns
      */
     localConvert(type, limit) {
-        if(type.isFixed){ return type; }
+        if (type.isFixed) { return type; }
         if (limit == undefined) { limit = 20; }
         if (limit <= 0) {
             throw "Too much";
-        }            
-        return type.replaceVar((t) => {               
+        }
+        return type.replaceVar((t) => {
             let ts = t.toString();
             if (this.constraints.has(ts)) {
                 return this.localConvert(this.constraints.get(ts), limit - 1);
             } else {
                 return t;
             }
-        });  
+        });
     }
 
 
     constraint(ta, tb) {
         let taconv = this.constraints.get(ta);
         if (taconv) {
-            let alt = this.localConvert(taconv);                
-            if (alt instanceof TypeVar) {                    
+            let alt = this.localConvert(taconv);
+            if (alt instanceof TypeVar) {
                 if (!(tb instanceof TypeVar)) {
                     //We need to check if the parametric doesn't contain alt internally, because then it wouldn't be compatible.
                     if (!(tb.contains(alt))) {
@@ -436,17 +436,17 @@ class TypeChecker {
                 if (tbs == alts) {
                     return true;
                 }
-                if (tb instanceof TypeVar) {                        
-                    return this.constraint(tbs, alt);                        
+                if (tb instanceof TypeVar) {
+                    return this.constraint(tbs, alt);
                 }
                 //console.log("Trying to unify " + ta + " with " + tb.toString() + " but it's already constrained to " + alt);
                 if (alt instanceof Parametric && !(tb instanceof Parametric)) {
                     return false;
-                }      
+                }
                 if (alt instanceof FunctionType && !(tb instanceof FunctionType)) {
                     return false;
                 }
-                return this.unify(alt, tb);                    
+                return this.unify(alt, tb);
             }
         } else {
             if (tb.contains(ta)) {
@@ -454,7 +454,7 @@ class TypeChecker {
             }
             this.constraints.set(ta, tb);
             return true;
-        }            
+        }
     }
 
     addConstraint(expectedType, newType, id) {
@@ -466,15 +466,15 @@ class TypeChecker {
     unify(ta, tb) {
         if (ta instanceof Primitive) {
             if (tb instanceof Primitive) {
-                return ta.name == tb.name; 
+                return ta.name == tb.name;
             }
-            if (tb instanceof TypeVar) {                    
+            if (tb instanceof TypeVar) {
                 return this.constraint(tb.toString(), ta);
             }
             return false;
         }
         if (ta instanceof TypeVar) {
-            if(tb instanceof Primitive) {                    
+            if (tb instanceof Primitive) {
                 return this.constraint(ta.toString(), tb);
             }
             if (tb instanceof TypeVar) {
@@ -515,17 +515,17 @@ class TypeChecker {
 
             }
             if (tb instanceof Parametric) {
-                return this.constraint(ta.toString(), this.localConvert(tb)); 
+                return this.constraint(ta.toString(), this.localConvert(tb));
             }
             if (tb instanceof FunctionType) {
-                return this.constraint(ta.toString(), this.localConvert(tb));                    
+                return this.constraint(ta.toString(), this.localConvert(tb));
             }
         }
         if (ta instanceof Parametric) {
-            if (tb instanceof Primitive) {                    
+            if (tb instanceof Primitive) {
                 return false;
             }
-            if (tb instanceof TypeVar) {                    
+            if (tb instanceof TypeVar) {
                 return this.constraint(tb.toString(), this.localConvert(ta));
             }
             if (tb instanceof Parametric) {

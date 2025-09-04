@@ -28,16 +28,16 @@ function deserializeType(type) {
 
 function deserializeProg(prog, language) {
 
-    
+
     function deserialize(prog, langMap) {
         let rv;
         if (prog.kind == 'fun') {
             let comp = langMap[prog.name];
             if (comp.parametric) {
-                rv = new pFunN(prog.name, comp.imp,  prog.args.map((arg) => deserialize(arg, langMap)), prog.param);
+                rv = new pFunN(prog.name, comp.imp, prog.args.map((arg) => deserialize(arg, langMap)), prog.param);
 
             } else {
-                rv = new FunN(prog.name, comp.imp,  prog.args.map((arg) => deserialize(arg, langMap)));
+                rv = new FunN(prog.name, comp.imp, prog.args.map((arg) => deserialize(arg, langMap)));
             }
         }
         else if (prog.kind == 'lambda') {
@@ -100,21 +100,21 @@ function deserializeComponent(component, language) {
 
 function deserializeState(state_stream, language) {
 
-    if(typeof state_stream == "string"){
+    if (typeof state_stream == "string") {
         state_stream = JSON.parse(state_stream);
     }
-    
-    if(state_stream.kind == "result"){
+
+    if (state_stream.kind == "result") {
         let tmpstate = new SynthesizerState(0);
         tmpstate.deserialize(state_stream.state, language);
         let prog = deserializeProg(state_stream.prog, language);
         let rv = new Result(state_stream.status, prog, state_stream.score, state_stream.cost, tmpstate);
         return rv;
-    }else{
+    } else {
         let rv = new SynthesizerState(0);
         rv.deserialize(state_stream, language);
         return rv;
     }
-    
-    
+
+
 }

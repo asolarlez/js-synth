@@ -26,7 +26,7 @@ class AST {
         this.depth = 1;
         return this;
     }
-    
+
     setState(state) {
         this.state = state;
         return this;
@@ -68,13 +68,13 @@ class FunN extends AST {
     constructor(name, imp, args) {
         super("fun");
         this.name = name;
-        this.imp = imp;            
-        this.args = args;            
+        this.imp = imp;
+        this.args = args;
     }
     isParametric() {
         return false;
     }
-    
+
     setDepth() {
         let dd = 0;
         let size = 1;
@@ -113,14 +113,14 @@ class FunN extends AST {
             }
             actuals.push(actual);
         }
-        actuals.push(inputs);            
+        actuals.push(inputs);
         return this.imp.apply(this, actuals);
     }
 
     accept(visitor) {
         return visitor.visitFun(this);
     }
-    
+
     traverse(enter, reenter, end) {
         if (enter) { enter(this); }
         for (let arg of this.args) {
@@ -166,13 +166,13 @@ class pFunN extends FunN {
         super(name, impP(param), args);
         this.parametric = true;
         this.param = param;
-        this.impP = impP;           
+        this.impP = impP;
     }
     isParametric() {
         return true;
     }
     print() {
-        let rv = this.name + "["+ this.param +"]" + "(";
+        let rv = this.name + "[" + this.param + "]" + "(";
         for (let i = 0; i < this.args.length; i++) {
             rv += this.args[i].print();
             if (i < this.args.length - 1) {
@@ -196,7 +196,7 @@ class IntN extends AST {
         this.val = val;
         this.range = range;
     }
-    setDepth() {           
+    setDepth() {
         this.depth = 0;
         this.size = 1;
         return this;
@@ -207,7 +207,7 @@ class IntN extends AST {
     eval(level) {
         return this.val;
     }
-    
+
     traverse(enter, reenter, end) {
         if (enter) { enter(this); }
         if (end) { end(this) }
@@ -231,7 +231,7 @@ class LambdaN extends AST {
     print() {
         return "(λ" + this.body.print() + ")";
     }
-    setDepth() {            
+    setDepth() {
         this.depth = this.body.depth + 1;
         this.size = 1 + this.body.size;
         return this;
@@ -258,7 +258,7 @@ class LambdaN extends AST {
             return rv;
         }
     }
-    
+
     traverse(enter, reenter, end) {
         if (enter) { enter(this); }
         this.body.traverse(enter, reenter, end);
@@ -277,7 +277,7 @@ class LambdaN extends AST {
      */
     typeConvert(tc) {
         super.typeConvert(tc);
-        this.body.typeConvert(tc);            
+        this.body.typeConvert(tc);
     }
     accept(visitor) {
         return visitor.visitLambda(this);
@@ -292,7 +292,7 @@ class InputN extends AST {
     print() {
         return this.name;
     }
-    setDepth() {            
+    setDepth() {
         this.depth = 0;
         this.size = 1;
         return this;
@@ -300,7 +300,7 @@ class InputN extends AST {
     eval(level, inputs, envt) {
         return inputs[this.name];
     }
-    
+
     traverse(enter, reenter, end) {
         if (enter) { enter(this); }
         if (end) { end(this) }
@@ -367,7 +367,7 @@ class Hole extends AST {
     eval(level, inputs, envt) {
         return this;
     }
-    
+
     traverse(enter, reenter, end) {
         if (enter) { enter(this); }
         if (end) { end(this) }
@@ -388,22 +388,22 @@ class Hole extends AST {
 }
 
 class Plug extends AST {
-        constructor() {
-            super("plug");
-            this.depth = 0;
-            this.size = 0;
-        }
-        setDepth() {
-            this.depth = 0;
-            this.size = 0; // holes don't count for size purposes.
-            return this;
-        }
-        print() {
-            return "#";
-        }
-        accept(visitor) {
-            return visitor.visitPlug(this);
-        }
+    constructor() {
+        super("plug");
+        this.depth = 0;
+        this.size = 0;
+    }
+    setDepth() {
+        this.depth = 0;
+        this.size = 0; // holes don't count for size purposes.
+        return this;
+    }
+    print() {
+        return "#";
+    }
+    accept(visitor) {
+        return visitor.visitPlug(this);
+    }
 }
 
 class ASTVisitor {
@@ -428,7 +428,7 @@ class ASTVisitor {
             return rv;
         } else {
             return fun;
-        }            
+        }
     }
     visitpFun(pfun) {
         let newargs = [];
@@ -482,7 +482,7 @@ function makeHole(type) {
 const HOLE = new Hole();
 
 
-        //Visitor to construct a function out of result.component;
+//Visitor to construct a function out of result.component;
 class GenerateCompImplementation extends ASTVisitor {
     /**
         * The high-level idea of this class is as follows. The goal is to take an AST of the program and turn it into a function 
@@ -508,18 +508,18 @@ class GenerateCompImplementation extends ASTVisitor {
         this.args = 0;
         let _this = this;
         this.imp = undefined;
-            
+
         component.traverse((node) => {
             if (node.kind == 'plug') { node.argpos = _this.args; _this.args++; }
         });
-    }   
+    }
     visitFun(fun) {
         const imp = fun.imp;
         const lazyArgs = fun.args.map((arg) => arg.accept(this));
-        return (args) => { 
+        return (args) => {
             let finalArgs = lazyArgs.map((f) => f(args));
             finalArgs.push(args[args.length - 1]); // Add the global parameters as the last argument.
-            return imp.apply(null, finalArgs);  
+            return imp.apply(null, finalArgs);
         }
     }
     visitpFun(pfun) {
@@ -536,13 +536,13 @@ class GenerateCompImplementation extends ASTVisitor {
             }
         };
     }
-    visitInput(input) {                
+    visitInput(input) {
         const name = input.name;
-        return (args) => args[args.length-1][name];                    
+        return (args) => args[args.length - 1][name];
     }
     visitIndex(index) {
         const idx = index.idx;
-        return (args) =>  args[args.length-2 - idx];
+        return (args) => args[args.length - 2 - idx];
     }
     visitHole(hole) { throw "Should not be any holes at this point!"; }
     visitPlug(plug) {
@@ -563,7 +563,7 @@ class GenerateCompImplementation extends ASTVisitor {
 class FunctionReplacer extends ASTVisitor {
     constructor(renames) {
         super();
-        this.renames = renames;         
+        this.renames = renames;
         for (let x in renames) {
             let elem = renames[x];
             elem.usecount = 0;
@@ -573,9 +573,9 @@ class FunctionReplacer extends ASTVisitor {
     visitFun(fun) {
         let rv = super.visitFun(fun);
         let name = rv.name;
-        if (name in this.renames) { 
+        if (name in this.renames) {
             let fun = rv;
-            rv = new FunN(this.renames[name].name, rv.imp,  rv.args).setState(rv.state).setDepth();
+            rv = new FunN(this.renames[name].name, rv.imp, rv.args).setState(rv.state).setDepth();
             rv.type = fun.type;
             rv.returntype = fun.returntype;
             rv.typeargs = fun.typeargs;
