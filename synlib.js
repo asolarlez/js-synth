@@ -725,11 +725,17 @@
         }
         print() {
             let rv = this.name + "(";
-            for (let arg of this.args) {
-                rv += arg.print() + ", ";
+            for (let i = 0; i < this.args.length; i++) {
+                rv += this.args[i].print();
+                if (i < this.args.length - 1) {
+                    rv += ", ";
+                }
             }
             rv += ")";
             return rv;
+        }
+        toString() {
+            return this.print();
         }
         eval(level, inputs, envt) {
             let actuals = [];
@@ -804,8 +810,11 @@
         }
         print() {
             let rv = this.name + "["+ this.param +"]" + "(";
-            for (let arg of this.args) {
-                rv += arg.print() + ", ";
+            for (let i = 0; i < this.args.length; i++) {
+                rv += this.args[i].print();
+                if (i < this.args.length - 1) {
+                    rv += ", ";
+                }
             }
             rv += ")";
             return rv;
@@ -2407,7 +2416,7 @@
             if (ec.length > 0) {
                 synthetics = '\n' + ec.map((elem) => elem.name + " : " + elem.source.print() + "\n").reduce((acc, elem) => acc + elem, "");
             }
-            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + sol.prog.print() + synthetics;
+            return sol.status + " cost:" + (sol.cost) + " score: " + sol.score + "\t" + (sol.prog ? sol.prog.print() : "NO_PROGRAM_FOUND") + synthetics;
         }
         serialize(){
             return JSON.stringify(this);
@@ -2652,7 +2661,7 @@
                 ++idx;
             }
             if (bestBad) {
-                throw bestBad;
+                throw new globalThis.Error(JSON.stringify(bestBad, undefined, 2));
             }
             return outputs;
         }
@@ -2683,6 +2692,9 @@
                     throw "Should never happen";
                 }
                 let score = scoreOutputs(examples, out);
+                if (typeof score !== 'number' || isNaN(score)) {
+                    throw new globalThis.Error("invalid score: " + score);
+                }
                 st.scoreTree(prog, (1 - score) * 100);
                 return score;
             }
@@ -2794,10 +2806,14 @@
 
                 let out = runOrLocalize(examples, prog, bound);
                 if (isBadResult(out)) {
-                    console.log(prog.print());
+                    console.log("BAD RESULT for prog:", prog.print());
                     throw "Should never happen";
                 }
                 let score = scoreOutputs(examples, out);
+                if (typeof score !== 'number' || isNaN(score)) {
+                    throw new globalThis.Error(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
+                }
+                // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
                 st.scoreTree(prog, (1 - score) * 100);
                 return score;
             }
@@ -2956,6 +2972,9 @@
                     throw "Should never happen";
                 } else {
                     let score = scoreOutputs(examples, out)
+                    if (typeof score !== 'number' || isNaN(score)) {
+                        throw new globalThis.Error("invalid score: " + score);
+                    }
                     st.scoreTree(prog, (1 - score) * 100);
                     log(1, budget + " Score:", score, ()=>prog.print());
                     if (score < threshold) {
