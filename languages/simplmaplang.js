@@ -1,5 +1,5 @@
 import { synthesize, isHole, makeHole, score, numscore, rvError, isError, 
-    isBadResult, Tp, deserializeState } from '../src/synlib.js';
+    isBadResult, deserializeState } from '../src/synlib.js';
 
 /**
  * 
@@ -19,7 +19,7 @@ let maplanguage = [
     {
         name: "map",
         kind: "fun",
-        type: Tp("list[\\alpha]->(\\alpha->\\beta)->list[\\beta]"),
+        type: "list[\\alpha]->(\\alpha->\\beta)->list[\\beta]",
         nargs: 2,
         imp: function (lst, f) {
             if (!(lst instanceof Array)) {
@@ -44,7 +44,7 @@ let maplanguage = [
     {
         name: "reduce",
         kind: "fun",
-        type: Tp("list[\\alpha]->(\\alpha->\\beta->\\beta)->\\beta->\\beta"),
+        type: "list[\\alpha]->(\\alpha->\\beta->\\beta)->\\beta->\\beta",
         nargs: 3,
         imp: function (lst, f, init) {
             if (!(lst instanceof Array)) {
@@ -81,7 +81,7 @@ let maplanguage = [
         name: "mad",
         kind: "fun",
         nargs: 3,
-        type: Tp("int->int->int->int"),
+        type: "int->int->int->int",
         imp: function (c, a, b) {
             if (!(typeof (c) == 'number')) {
                 return rvError(0);
@@ -109,27 +109,27 @@ let maplanguage = [
 ]
 let problems = {
     "mapincrement": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("list[int]") }],
+        intypes: [{ kind: "input", name: "x", type: "list[int]" }, { kind: "output", type: "list[int]" }],
         io: [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
             { in: { x: [5, 6, 9] }, out: [6, 7, 10] }],
         depth: 4
     },
     "reducebasic": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("int") }],
+        intypes: [{ kind: "input", name: "x", type: "list[int]" }, { kind: "output", type: "int" }],
         io: [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
             { in: { x: [7, 0, 0] }, out: 7 }],
         depth: 4
     },
     "2dreduce": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[list[int]]") }, { kind: "output", type: Tp("list[int]") }],
+        intypes: [{ kind: "input", name: "x", type: "list[list[int]]" }, { kind: "output", type: "list[int]" }],
         io:[{ in: { x: [[1, 2], [3, 4]] }, out: [3, 7] },
         { in: { x: [[5, 6], [9, 10]] }, out: [11, 19] },
             { in: { x: [[7, 0], [1, 2, 3], [2, 3]] }, out: [7, 6, 5] }],
         depth:6
     },
     "prodreduce": {
-        intypes: [{ kind: "input", name: "x", type: Tp("list[int]") }, { kind: "output", type: Tp("int") }],
+        intypes: [{ kind: "input", name: "x", type: "list[int]" }, { kind: "output", type: "int" }],
         io:[{ in: { x: [1, 2, 3] }, out: 6 },
             { in: { x: [5, 2, 3] }, out: 30 },
             { in: { x: [7, 0, 0] }, out: 0 }],
@@ -203,7 +203,7 @@ function runAll(verbose) {
 function runB() {
     let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
     { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, numscore, 0.001, 3, 1000);
+    let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 3, 1000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
@@ -217,7 +217,7 @@ function run() {
     let examples = [{ in: { x: [1, 2, 3] }, out: 6 },
         { in: { x: [5, 6, 9] }, out: 20 },
         { in: { x: [7, 0, 0] }, out: 7 }];
-    let sol = synthesize([{ kind: "input", name: "x", type: Tp("list[int]") }], examples, maplanguage, numscore, 0.001, 5, 10000);
+    let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 5, 10000);
     console.log("Solution ", sol.print());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);

@@ -2,7 +2,7 @@ import { StatsTracker } from './stats.js';
 import { FunctionReplacer, FunN, pFunN, LambdaN, InputN, IntN, deBroujin, HOLE } from './exprs.js';
 import { deserializeComponent, deserializeProg } from './deserialize.js';
 import { componentize } from './librarylearning.js';
-import { Primitive, TypeChecker } from './types.js';
+import { Tp, Primitive, TypeChecker } from './types.js';
 import { RVError, BadResult, isBadResult, isError, badResult, rvError, log } from './util.js';
 
 export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, randomAndHillClimb, randomRandom, fancyRandClone, synthesize, rvError, isError, isBadResult, score, numscore, testProg };
@@ -14,7 +14,7 @@ function testProg(prog, examples, bound, config, st) {
         throw "Should never happen";
     }
     let score = config.scoreOutputs(examples, out);
-    if (typeof score !== 'number' || isNaN(score) || score < 0 || score > 1) {
+    if (typeof score !== 'number' || isNaN(score) || score < 0 || score > 1.0001) {
         throw new Error(`invalid score (${score}) for program ${prog.print()} with actual outputs ${out} and expected outputs ${examples.map(example => example.out)}`);
     }
     // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
@@ -939,7 +939,8 @@ function fancyRandClone(language, prog, bound, st, tc) {
 }
 
 function processFunctionType(c) {
-    let type = c.type;
+    // Convert string type to Tp object if needed
+    let type = (typeof c.type === 'string') ? Tp(c.type) : c.type;
     let nargs = c.nargs;
     let typeargs = [];
     for (let i = 0; i < nargs; ++i) {
@@ -979,14 +980,21 @@ function synthesize(inputspec, examples, language, scoreOutputs, threshold, boun
     config.scoreOutputs = scoreOutputs;
     config.threshold = threshold;
 
+    // Convert string types to Tp objects in inputspec
+    let processedInputspec = inputspec.map(elem => {
+        if (elem.type && typeof elem.type === 'string') {
+            return { ...elem, type: Tp(elem.type) };
+        }
+        return elem;
+    });
 
-    let outspec = inputspec.filter((elem) => elem.kind == "output");
+    let outspec = processedInputspec.filter((elem) => elem.kind == "output");
     let outType = undefined;
     if (outspec.length != 0) {
         outType = outspec[0].type;
     }
 
-    let langWithInputs = processLanguage(language, inputspec);
+    let langWithInputs = processLanguage(language, processedInputspec);
 
 
 

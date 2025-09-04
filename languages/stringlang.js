@@ -1,5 +1,5 @@
 import { synthesize, isHole, makeHole, score,
-     rvError, isError, isBadResult, Tp } from '../src/synlib.js';
+     rvError, isError, isBadResult } from '../src/synlib.js';
 
 
 function substrBody(startA, startB, endA, endB, idx, input) {
@@ -34,7 +34,7 @@ let strlanguage = [
         name: "reg",
         kind: "fun",
         parametric: true,
-        type:Tp("RegExp"),
+        type:"RegExp",
         paramInit: function () {
             let choices = regexpChoices;
             return choices[Math.floor(Math.random() * choices.length)];
@@ -54,7 +54,7 @@ let strlanguage = [
         name: "substring",
         kind: "fun",
         nargs: 6,
-        type: Tp("RegExp -> RegExp -> RegExp -> RegExp -> int -> string -> string"),
+        type: "RegExp -> RegExp -> RegExp -> RegExp -> int -> string -> string",
         imp: function (startA, startB, endA, endB, idx, input) {
             if (typeof (input) != 'string') {
                 return rvError(5);
@@ -81,7 +81,7 @@ let strlanguage = [
         name: "concat",
         kind: "fun",
         nargs: 2,
-        type: Tp("string -> string -> string"),
+        type: "string -> string -> string",
         imp: function (a, b) {
             if (typeof (a) != 'string') {
                 return rvError(0);
@@ -167,7 +167,7 @@ function fancyStringScore(examples, outputs) {
 const problems = {
 
     "parenthesis": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: "string" }, { kind: "output", type: "string" }],
         io: [{ in: { x: "(hello) world" }, out: "hello" },
         { in: { x: "this is (the) word" }, out: "the" },
             { in: { x: "a (good) example" }, out: "good" },
@@ -175,21 +175,21 @@ const problems = {
         depth: 3
     },
     "outer-parenthesis": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: "string" }, { kind: "output", type: "string" }],
         io: [{ in: { x: "(hello) world" }, out: "(hello)" },
         { in: { x: "this is (the) word" }, out: "(the)" },
         { in: { x: "a (good) example" }, out: "(good)" }],
         depth: 3
     },
     "numbers": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }, { kind: "output", type: Tp("string") }],
+        intypes: [{ kind: "input", name: "x", type: "string" }, { kind: "output", type: "string" }],
         io: [{ in: { x: "(hello) world 57" }, out: "57" },
         { in: { x: "this is (the) word 33" }, out: "33" },
         { in: { x: "a (good) example 22" }, out: "22" }],
         depth: 3
     },
     "combined": {
-        intypes: [{ kind: "input", name: "x", type: Tp("string") }, {kind:"output", type:Tp("string")}],
+        intypes: [{ kind: "input", name: "x", type: "string" }, {kind:"output", type:"string"}],
         io: [{ in: { x: "(hello) world 57" }, out: "hello57" },
         { in: { x: "this is (the) word 33" }, out: "the33" },
         { in: { x: "a (good) example 22" }, out: "good22" }],

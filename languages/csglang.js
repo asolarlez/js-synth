@@ -1,4 +1,4 @@
-import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult, Tp } from '../src/synlib.js';
+import { synthesize, isHole, makeHole, score, rvError, isError, isBadResult } from '../src/synlib.js';
 
 
 function unionHelper(sh1, sh2) {
@@ -76,7 +76,7 @@ let csglanguage = [
         name: "circle",
         kind: "fun",
         parametric: false,
-        type: Tp("int->int->int->shape"),        
+        type: "int->int->int->shape",        
         nargs: 3,
         imp: function (x,y,r) {
             return {kind:'circle', x: x, y: y, r: r};
@@ -86,7 +86,7 @@ let csglanguage = [
         name: "rect",
         kind: "fun",
         parametric: false,
-        type: Tp("int->int->int->int->shape"),
+        type: "int->int->int->int->shape",
         nargs: 4,                
         imp: function (x, y, w, h) {
             return { kind: 'rect', x: x, y: y, w: w, h: h };
@@ -96,7 +96,7 @@ let csglanguage = [
         name: "union",
         kind: "fun",
         parametric: false,
-        type: Tp("shape->shape->shape"),
+        type: "shape->shape->shape",
         nargs: 2,
         imp: function (sh1, sh2) {
             return { kind: 'union', sh1: sh1, sh2: sh2 };
@@ -106,7 +106,7 @@ let csglanguage = [
         name: "dif",
         kind: "fun",
         parametric: false,
-        type: Tp("shape->shape->shape"),
+        type: "shape->shape->shape",
         nargs: 2,
         imp: function (sh1, sh2) {
             return { kind: 'dif', sh1: sh1, sh2: sh2 };
@@ -116,7 +116,7 @@ let csglanguage = [
         name: "loop", 
         kind: "fun",
         parametric: false,
-        type: Tp("shape->int->int->int->shape"),
+        type: "shape->int->int->int->shape",
         nargs: 4,
         imp: function (sh, dx, dy, n) {
             return { kind: 'loop', sh: sh, dx:dx, dy:dy, n: n };
@@ -126,7 +126,7 @@ let csglanguage = [
         name: "eval",
         kind: "fun",
         parametric: false,
-        type: Tp("pt->shape->feature"),
+        type: "pt->shape->feature",
         nargs: 2,
         imp: shapeEval,
     },
@@ -158,7 +158,7 @@ let l = {
 const problems = {
 
     "circleRect": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
+        intypes: [{ kind: "input", name: "x", type: "pt" }, { kind: "output", type: "feature" }],
         prog: l.union(l.circle(3, 3, 1), l.rect(3, 2, 3, 2)),
         io: [{ in: { x: {x:2, y:3} } },
             { in: { x: { x: 3, y: 3 } } },
@@ -171,7 +171,7 @@ const problems = {
     },
 
     "circleLoop": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
+        intypes: [{ kind: "input", name: "x", type: "pt" }, { kind: "output", type: "feature" }],
         prog: l.loop(l.circle(3, 3, 1), 1, 0, 4),
         io: [{ in: { x: { x: 1, y: 2 } } },
             { in: { x: { x: 2, y: 3 } } },
@@ -184,7 +184,7 @@ const problems = {
         depth: 3
     },
     "loopDif": {
-        intypes: [{ kind: "input", name: "x", type: Tp("pt") }, { kind: "output", type: Tp("feature") }],
+        intypes: [{ kind: "input", name: "x", type: "pt" }, { kind: "output", type: "feature" }],
         prog: l.dif(l.loop(l.circle(3, 3, 1), 1, 0, 4),
             l.rect(3, 3, 3, 2)),
         io: [
