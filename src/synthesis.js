@@ -3,7 +3,7 @@ import { FunctionReplacer, FunN, pFunN, LambdaN, InputN, IntN, deBroujin, HOLE }
 import { deserializeComponent, deserializeProg } from './deserialize.js';
 import { componentize } from './librarylearning.js';
 import { Primitive, TypeChecker } from './types.js';
-import { Error, BadResult, isBadResult, isError, badResult, rvError, log } from './util.js';
+import { RVError, BadResult, isBadResult, isError, badResult, rvError, log } from './util.js';
 
 export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, randomAndHillClimb, randomRandom, fancyRandClone, synthesize, rvError, isError, isBadResult, score, numscore, testProg };
 
@@ -15,7 +15,7 @@ function testProg(prog, examples, bound, config, st) {
     }
     let score = config.scoreOutputs(examples, out);
     if (typeof score !== 'number' || isNaN(score)) {
-        throw new globalThis.Error(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
+        throw new globalThis.RVError(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
     }
     // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
     st.scoreTree(prog, (1 - score) * 100);
@@ -362,7 +362,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
                 
     if (!construct) {
         st.failedState(state);
-        return new Error(0); // Error 0 means that this node was unsatisfiable. 
+        return new RVError(0); // RVError 0 means that this node was unsatisfiable. 
     }
     
     let oldTypes = tc.checkpoint();
@@ -380,7 +380,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             }
             
             if (!tc.addConstraint(expectedType, construct.returntype, rv.id)) {
-                return new Error(0);
+                return new RVError(0);
             }
             rv.state = state;                   
             st.trackAction(state, rv);
@@ -391,13 +391,13 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
                 let newstate = st.transition(state, rv, i);
                 let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, extras, newstate, initialBound, st, tc);
                 
-                if (arg instanceof Error) {
+                if (arg instanceof RVError) {
                     //If i==0 and arg.narg == 0, it means that this whole node is unsatisfiable. 
                     if (i == 0 && arg.narg == 0) {
                         return arg;
                     } else {
                         //The farther we get from zero, the more likely it is that random regeneration might fix things.
-                        return new Error(arg.narg + 1);
+                        return new RVError(arg.narg + 1);
                     }                            
                 }
                 args.push(arg);
@@ -413,7 +413,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             rv.state = state;
             rv.childstate = st.transition(state, rv, 0);
             if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
-                return new Error(0);
+                return new RVError(0);
             }
             return rv;
         }
@@ -424,7 +424,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             
             if (!expectedType) {
                 //should not produce lambdas if we don't know what type the argument is going to be.
-                return new Error(0);
+                return new RVError(0);
             }
             let typeFrom =  expectedType.from ;
             let typeTo = expectedType.to ;
@@ -441,7 +441,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             let body = randomProgram(typeTo, language, bound - 1, args, newstate, initialBound, st, tc);
             
             rv.body = body;
-            if (body instanceof Error) {
+            if (body instanceof RVError) {
                 return body;
             }
             return rv;
@@ -449,7 +449,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
         if (construct.kind == "input") {
                                 
             if (!tc.addConstraint(expectedType, construct.type)) {
-                return new Error(0);
+                return new RVError(0);
             }
             let rv = new InputN(construct.name);
             rv.setState(state);
@@ -461,7 +461,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             let rv = new deBroujin(construct.idx);
             
             if (!tc.addConstraint(expectedType, construct.type, rv.id)) {
-                return new Error(0);
+                return new RVError(0);
             }                                        
             st.trackAction(state, rv);
             rv.setState(state);
@@ -474,7 +474,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
     while (construct) {
         ++attempts;
         let out = fleshOutConstruct(construct);
-        if (out instanceof Error) {
+        if (out instanceof RVError) {
             if (out.narg == 0) {
                 //This means that this construct failed conclusively, so we should continue cycling through constructs until
                 //we run out, at which point we return 0.
@@ -496,7 +496,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
                     
                     tc.revert(oldTypes);
                 } else {
-                    return new Error(out.narg + 1);
+                    return new RVError(out.narg + 1);
                 }
             }
         } else {
@@ -510,7 +510,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             return out;
         }
     }
-    return new Error(0);
+    return new RVError(0);
 }
 
 function runOrLocalize(examples, prog, bound) {
@@ -532,7 +532,7 @@ function runOrLocalize(examples, prog, bound) {
         ++idx;
     }
     if (bestBad) {
-        throw new globalThis.Error(JSON.stringify(bestBad, undefined, 2));
+        throw new globalThis.RVError(JSON.stringify(bestBad, undefined, 2));
     }
     return outputs;
 }
@@ -609,7 +609,7 @@ function smcSynth(language, examples, bound, budget, outType, state, config) {
                 adjusted = entry.prog;
             }
             
-            if (adjusted instanceof Error) {
+            if (adjusted instanceof RVError) {
                 console.log("randomAndHillClimb1 FAILED")
                 return adjusted;
             }
@@ -715,7 +715,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
         const probReplace = 0.5; // Math.min(0.5, 1.5*workList[beamsize-1].score);
         if (Math.random() < probReplace) {
             let adjusted = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
-            if (adjusted instanceof Error) {
+            if (adjusted instanceof RVError) {
                 console.log("randomAndHillClimb1 FAILED")
                 return;
             }
@@ -734,7 +734,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
             log(3, () => "original one " + idx + ":" + prog.print() + " score" + workList[idx].score);
 
             let adjusted = fancyRandClone(language, state.workList[idx].prog, bound, st, tc);
-            if (adjusted instanceof Error) {
+            if (adjusted instanceof RVError) {
                 console.log("randomAndHillClimb1 FAILED")
                 return;
             }
@@ -765,7 +765,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
         if (budget == rejuvenate) {                    
             for (let i = state.beamsize / 2; i < state.beamsize; ++i) {
                 let adjusted = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
-                if (adjusted instanceof Error) {
+                if (adjusted instanceof RVError) {
                     console.log("randomAndHillClimb1 FAILED")
                     return;
                 }
@@ -810,7 +810,7 @@ function randomRandom(language, examples, bound, budget, outType, config) {
         } else {
             let score = config.scoreOutputs(examples, out)
             if (typeof score !== 'number' || isNaN(score)) {
-                throw new globalThis.Error("invalid score: " + score);
+                throw new Error("invalid score: " + score);
             }
             st.scoreTree(prog, (1 - score) * 100);
             log(1, budget + " Score:", score, ()=>prog.print());
@@ -878,7 +878,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
                 } else {
                     //If the argument didn't change, I am going to give it a chance to rewrite this node.
                     let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound, st, tc);
-                    if (rv instanceof Error) {
+                    if (rv instanceof RVError) {
                         
                         return node;
                     }
@@ -920,7 +920,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
             return node;
         } else {
             let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound, st, tc);
-            if (rv instanceof Error) {
+            if (rv instanceof RVError) {
                 
                 return node;
             }

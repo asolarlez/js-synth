@@ -1,4 +1,4 @@
-export { log, verbosity, Error, BadResult, isBadResult, isError, badResult, rvError };
+export { log, verbosity, RVError, BadResult, isBadResult, isError, badResult, rvError };
 
 
 let verbosity = 0;
@@ -13,12 +13,12 @@ function log(level, msg1, msg2, msg3, msg4) {
     }
 }
 
-class Error {
+class RVError {
     constructor(narg) {
         this.narg = narg;
     }
     toString() {
-        return "Error(" + this.narg + ")";
+        return "RVError(" + this.narg + ")";
     }
 }
 
@@ -38,7 +38,7 @@ function isBadResult(res) {
 }
 
 function isError(res) {
-    return res instanceof Error;
+    return res instanceof RVError;
 }
 
 function badResult(parent, parent_idx, child, child_idx, level, envt) {
@@ -46,5 +46,5 @@ function badResult(parent, parent_idx, child, child_idx, level, envt) {
 }
 
 function rvError(child_id) {
-    return new Error(child_id);
+    return new RVError(child_id);
 }
