@@ -14,8 +14,8 @@ function testProg(prog, examples, bound, config, st) {
         throw "Should never happen";
     }
     let score = config.scoreOutputs(examples, out);
-    if (typeof score !== 'number' || isNaN(score)) {
-        throw new globalThis.RVError(`invalid score (${score}) for program ${prog.print()} with outputs ${out}`);
+    if (typeof score !== 'number' || isNaN(score) || score < 0 || score > 1) {
+        throw new Error(`invalid score (${score}) for program ${prog.print()} with actual outputs ${out} and expected outputs ${examples.map(example => example.out)}`);
     }
     // console.log("DEBUG: Program:", prog.print(), "Score:", score, "Output:", out);
     st.scoreTree(prog, (1 - score) * 100);
