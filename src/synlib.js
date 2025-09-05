@@ -1,7 +1,9 @@
 // import everything from types.js
 import { isHole, makeHole } from './exprs.js';
 import { deserializeType, deserializeState } from './deserialize.js';
-import { synthesize, rvError, isError, isBadResult, score, numscore } from './synthesis.js';
+import { synthesize, rvError, isError, isBadResult, score, numscore, runOrLocalize } from './synthesis.js';
+
+
 export {
     synthesize,
     rvError,
@@ -12,5 +14,6 @@ export {
     score,
     numscore,
     deserializeState,
-    deserializeType
+    deserializeType,
+    runOrLocalize
 };
