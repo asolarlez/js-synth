@@ -318,7 +318,7 @@ class Result {
     }
 }
 
-function randomProgram(expectedType, language, bound, extras, state, initialBound, st, tc) {
+function randomProgram(expectedType, language, bound, st, tc, extras, state, initialBound) {
     if (initialBound == undefined) {
         initialBound = bound;
     }
@@ -389,7 +389,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
             }
             for (let i = 0; i < n; ++i) {
                 let newstate = st.transition(state, rv, i);
-                let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, extras, newstate, initialBound, st, tc);
+                let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, st, tc, extras, newstate, initialBound);
 
                 if (arg instanceof RVError) {
                     //If i==0 and arg.narg == 0, it means that this whole node is unsatisfiable. 
@@ -438,7 +438,7 @@ function randomProgram(expectedType, language, bound, extras, state, initialBoun
 
             st.trackAction(state, rv);
             let newstate = st.transition(state, rv, 0);
-            let body = randomProgram(typeTo, language, bound - 1, args, newstate, initialBound, st, tc);
+            let body = randomProgram(typeTo, language, bound - 1, st, tc, args, newstate, initialBound);
 
             rv.body = body;
             if (body instanceof RVError) {
@@ -562,7 +562,7 @@ function smcSynth(language, examples, bound, budget, outType, state, config) {
         st = state.getTracker();
         state.populate((i) => {
             tc.reset();
-            let newprog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
+            let newprog = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
             score = testProg(newprog, examples, bound, config, st);
             totalScore += mass(score);
             return { prog: newprog, score: score };
@@ -663,7 +663,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
         st = state.getTracker();
         state.populate((i) => {
             tc.reset();
-            let newprog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
+            let newprog = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
             score = testProg(newprog, examples, bound, config, st);
             return { prog: newprog, score: score };
         });
@@ -714,7 +714,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
 
         const probReplace = 0.5; // Math.min(0.5, 1.5*workList[beamsize-1].score);
         if (Math.random() < probReplace) {
-            let adjusted = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
+            let adjusted = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
             if (adjusted instanceof RVError) {
                 console.log("randomAndHillClimb1 FAILED")
                 return;
@@ -764,7 +764,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
         }
         if (budget == rejuvenate) {
             for (let i = state.beamsize / 2; i < state.beamsize; ++i) {
-                let adjusted = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
+                let adjusted = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
                 if (adjusted instanceof RVError) {
                     console.log("randomAndHillClimb1 FAILED")
                     return;
@@ -798,7 +798,7 @@ function randomRandom(language, examples, bound, budget, outType, config) {
     let bestOutput = undefined;
     let bestScore = 100000;//score is an error, so bigger is worse.
 
-    let prog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc);
+    let prog = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
     let out = runOrLocalize(examples, prog, bound);
     const initBudget = budget;
 
@@ -828,7 +828,7 @@ function randomRandom(language, examples, bound, budget, outType, config) {
                     log(1, "New best solution", score, () => bestSolution.print());
                 }
                 tc.reset();
-                prog = randomProgram(outType, language, bound, undefined, undefined, undefined, st, tc); //fancyRandClone(language, prog, bound);
+                prog = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined); //fancyRandClone(language, prog, bound);
                 --budget;
                 out = runOrLocalize(examples, prog, bound);
             }
@@ -877,7 +877,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
 
                 } else {
                     //If the argument didn't change, I am going to give it a chance to rewrite this node.
-                    let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound, st, tc);
+                    let rv = randomProgram(expectedType, language, lbound, st, tc, envt, node.state, lbound);
                     if (rv instanceof RVError) {
 
                         return node;
@@ -919,7 +919,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
 
             return node;
         } else {
-            let rv = randomProgram(expectedType, language, lbound, envt, node.state, lbound, st, tc);
+            let rv = randomProgram(expectedType, language, lbound, st, tc, envt, node.state, lbound);
             if (rv instanceof RVError) {
 
                 return node;
