@@ -77,7 +77,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "int->int->int->shape",        
-        nargs: 3,
         imp: function (x,y,r) {
             return {kind:'circle', x: x, y: y, r: r};
         },       
@@ -87,7 +86,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "int->int->int->int->shape",
-        nargs: 4,                
         imp: function (x, y, w, h) {
             return { kind: 'rect', x: x, y: y, w: w, h: h };
         },
@@ -97,7 +95,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "shape->shape->shape",
-        nargs: 2,
         imp: function (sh1, sh2) {
             return { kind: 'union', sh1: sh1, sh2: sh2 };
         },
@@ -107,7 +104,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "shape->shape->shape",
-        nargs: 2,
         imp: function (sh1, sh2) {
             return { kind: 'dif', sh1: sh1, sh2: sh2 };
         },
@@ -117,7 +113,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "shape->int->int->int->shape",
-        nargs: 4,
         imp: function (sh, dx, dy, n) {
             return { kind: 'loop', sh: sh, dx:dx, dy:dy, n: n };
         },
@@ -127,7 +122,6 @@ let csglanguage = [
         kind: "fun",
         parametric: false,
         type: "pt->shape->feature",
-        nargs: 2,
         imp: shapeEval,
     },
 
@@ -214,7 +208,7 @@ function runOne(p, verbose) {
         problem.io[idx].out = out;
     }
     let sol = synthesize(problem.intypes, problem.io, csglanguage, score, 0.001, problem.depth, 150000);
-    console.log(p, sol.print());;
+    console.log(p, sol.toString());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
             console.log("Input: ", problems[p].io[i].in.x);

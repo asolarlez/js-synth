@@ -43,7 +43,6 @@ let strlanguage = [
             let choices = regexpChoices;
             return choices[Math.floor(Math.random() * choices.length)];
         },
-        nargs: 0,
         imp: function (param) {
             return function () {                
                 return param;
@@ -53,7 +52,6 @@ let strlanguage = [
     ,{
         name: "substring",
         kind: "fun",
-        nargs: 6,
         type: "RegExp -> RegExp -> RegExp -> RegExp -> int -> string -> string",
         imp: function (startA, startB, endA, endB, idx, input) {
             if (typeof (input) != 'string') {
@@ -80,7 +78,6 @@ let strlanguage = [
     {
         name: "concat",
         kind: "fun",
-        nargs: 2,
         type: "string -> string -> string",
         imp: function (a, b) {
             if (typeof (a) != 'string') {
@@ -203,7 +200,7 @@ function runOne(p, verbose) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
     let sol = synthesize(problem.intypes, problem.io, strlanguage, fancyStringScore, 0.001, problem.depth, 100000);
-    console.log(p, sol.print());;
+    console.log(p, sol.toString());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
             console.log("Input: ", problems[p].io[i].in.x);

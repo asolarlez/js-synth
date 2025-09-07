@@ -1,5 +1,6 @@
 import { Tp, TypeVar, Primitive, FunctionType, TypeChecker } from './types.js';
 import { ASTVisitor, FunN, pFunN, LambdaN, isHole, Plug, AST } from './exprs.js';
+import { inferNargs } from './synthesis.js';
 
 
 export { stitch, componentize, getLabel };
@@ -296,7 +297,7 @@ function stitch(programs, language) {
         if (instance instanceof FunN) {
             return "fun/" + instance.name;
         }
-        return instance.print();
+        return instance.toString();
     }
 
     function newWithHoles(instance) {
@@ -344,7 +345,7 @@ function stitch(programs, language) {
         addToWorklist(worklist, instances);
         if (construct.synthetic) {
             // If the construct is synthetic, we need to add it to the component index.
-            componentIndex[construct.source.print()] = construct;
+            componentIndex[construct.source.toString()] = construct;
         };
     }
     //Sort the worklist so the one with the highest score comes out on top.
@@ -354,7 +355,7 @@ function stitch(programs, language) {
 
         newWL.sort((a, b) => b.score - a.score);
         //Filter out any candidate that already exists in componentIndex.
-        newWL = newWL.filter((elem) => !(elem.construct.print() in componentIndex));
+        newWL = newWL.filter((elem) => !(elem.construct.toString() in componentIndex));
 
         let newWL2 = newWL.filter((elem) => (elem.scoreBound != elem.score || elem.size > 1) && elem.count > 1);
         if (newWL2.length == 0) {
@@ -436,7 +437,7 @@ function componentize(workList, language, st) {
                 this.mode = 'replace';
                 this.instance = this.result.construct;
                 let newargs = myfun(); //This just jumps to the this.mode == 'replace' branch
-                let argArray = mapToArray(newargs, this.newComponent.nargs);
+                let argArray = mapToArray(newargs, inferNargs(this.newComponent.type));
                 let rv = new FunN(this.newComponent.name, this.newComponent.imp, argArray);
                 let returntype = elem.type;
                 let typeargs = argArray.map(arg => arg.type);
@@ -577,7 +578,6 @@ function componentize(workList, language, st) {
     let langEntry = {
         name: name,
         kind: 'fun',
-        nargs: visitor.args,
         imp: myImp,
         pos: language.length,
         synthetic: true,

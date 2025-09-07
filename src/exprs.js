@@ -86,19 +86,16 @@ class FunN extends AST {
         this.size = size;
         return this;
     }
-    print() {
+    toString() {
         let rv = this.name + "(";
         for (let i = 0; i < this.args.length; i++) {
-            rv += this.args[i].print();
+            rv += this.args[i].toString();
             if (i < this.args.length - 1) {
                 rv += ", ";
             }
         }
         rv += ")";
         return rv;
-    }
-    toString() {
-        return this.print();
     }
     eval(level, inputs, envt) {
         let actuals = [];
@@ -171,10 +168,10 @@ class pFunN extends FunN {
     isParametric() {
         return true;
     }
-    print() {
+    toString() {
         let rv = this.name + "[" + this.param + "]" + "(";
         for (let i = 0; i < this.args.length; i++) {
-            rv += this.args[i].print();
+            rv += this.args[i].toString();
             if (i < this.args.length - 1) {
                 rv += ", ";
             }
@@ -201,7 +198,7 @@ class IntN extends AST {
         this.size = 1;
         return this;
     }
-    print() {
+    toString() {
         return "" + this.val;
     }
     eval(level) {
@@ -228,8 +225,8 @@ class LambdaN extends AST {
         super("lambda");
         this.body = body;
     }
-    print() {
-        return "(λ" + this.body.print() + ")";
+    toString() {
+        return "(λ" + this.body.toString() + ")";
     }
     setDepth() {
         this.depth = this.body.depth + 1;
@@ -289,7 +286,7 @@ class InputN extends AST {
         super("input");
         this.name = name;
     }
-    print() {
+    toString() {
         return this.name;
     }
     setDepth() {
@@ -327,7 +324,7 @@ class deBroujin extends AST {
             this.pos = pos;
         }
     }
-    print() {
+    toString() {
         return "$" + this.idx;
     }
     eval(level, inputs, envt) {
@@ -361,7 +358,7 @@ class Hole extends AST {
         this.size = 0; // holes don't count for size purposes.
         return this;
     }
-    print() {
+    toString() {
         return "□";
     }
     eval(level, inputs, envt) {
@@ -398,7 +395,7 @@ class Plug extends AST {
         this.size = 0; // holes don't count for size purposes.
         return this;
     }
-    print() {
+    toString() {
         return "#";
     }
     accept(visitor) {

@@ -63,7 +63,7 @@ export async function parallelSolve(problem, servers, language, config = {}) {
             servers.map((server, i) => postSynthesize(server, bodies[i], language))
         );
         // Print a summary of the results.
-        console.log(results.map(r => r.print()).join('\n'));
+        console.log(results.map(r => r.toString()).join('\n'));
         // Check for any correct
         for (let r of results) {
             if (r.status && r.status === 'CORRECT') {

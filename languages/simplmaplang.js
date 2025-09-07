@@ -20,7 +20,6 @@ let maplanguage = [
         name: "map",
         kind: "fun",
         type: "list[\\alpha]->(\\alpha->\\beta)->list[\\beta]",
-        nargs: 2,
         imp: function (lst, f) {
             if (!(lst instanceof Array)) {
                 return rvError(0);
@@ -45,7 +44,6 @@ let maplanguage = [
         name: "reduce",
         kind: "fun",
         type: "list[\\alpha]->(\\alpha->\\beta->\\beta)->\\beta->\\beta",
-        nargs: 3,
         imp: function (lst, f, init) {
             if (!(lst instanceof Array)) {
                 return rvError(0);
@@ -80,7 +78,6 @@ let maplanguage = [
     {
         name: "mad",
         kind: "fun",
-        nargs: 3,
         type: "int->int->int->int",
         imp: function (c, a, b) {
             if (!(typeof (c) == 'number')) {
@@ -144,7 +141,7 @@ function runOne(p, verbose, N, config) {
     let problem = problems[p];
     if (verbose) { console.log("Problem ", p); }
     let sol = synthesize(problem.intypes, problem.io, maplanguage, numscore, 0.001, problem.depth, N, config);
-    console.log(p, sol.print());;
+    console.log(p, sol.toString());;
     if (verbose) {
         for (let i = 0; i < problems[p].io.length; ++i) {
             console.log("Input: ", problems[p].io[i].in.x);
@@ -204,7 +201,7 @@ function runB() {
     let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
     { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
     let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 3, 1000);
-    console.log("Solution ", sol.print());
+    console.log("Solution ", sol.toString());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
         console.log("Output:", sol.prog.eval(3, examples[i].in, []));
@@ -218,7 +215,7 @@ function run() {
         { in: { x: [5, 6, 9] }, out: 20 },
         { in: { x: [7, 0, 0] }, out: 7 }];
     let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 5, 10000);
-    console.log("Solution ", sol.print());
+    console.log("Solution ", sol.toString());
     for (let i = 0; i < examples.length; ++i) {
         console.log("Input: ", examples[i].in.x);
         console.log("Output:", sol.prog.eval(3, examples[i].in, []));
