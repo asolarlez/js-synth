@@ -9,7 +9,7 @@ export { SynthesizerState, Result, randomProgram, runOrLocalize, smcSynth, rando
 
 function inferNargs(typeString) {
     if (!typeString || typeof typeString !== 'string') {
-        return 0;
+        throw new Error(`inferNargs expects a string, got: ${typeof typeString}`);
     }
     // Count main function arrows (not nested in parentheses)
     let depth = 0;
