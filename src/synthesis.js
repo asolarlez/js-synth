@@ -350,16 +350,19 @@ function randomProgram(expectedType, language, bound, st, tc, extras, state, ini
         state = st.startState();
     }
 
+    // Select initial language construct using statistical guidance
     let construct = st.randomConstruct(state, language, extras);
     let initialConst = construct.pos;
 
     function advanceConstruct() {
+        // Filter out lambdas and functions when no depth remaining
         if (bound <= 0) {
             while (construct && (construct.kind == "lambda" || (construct.kind == "fun" && inferNargs(construct.type) > 0))) {
                 st.failedAction(state, construct);
                 construct = st.nextConstruct(construct, initialConst, state, language, extras);
             }
         }
+        // Find type-compatible construct by cycling through language elements
         if (construct) {
             let chk = tc.checkStep(construct, expectedType);
             let i = 0;
@@ -411,6 +414,7 @@ function randomProgram(expectedType, language, bound, st, tc, extras, state, ini
             if (n == 0) {
                 rv.childstate = st.transition(state, rv, 0);
             }
+            // Recursively generate arguments with decremented bound
             for (let i = 0; i < n; ++i) {
                 let newstate = st.transition(state, rv, i);
                 let arg = randomProgram(tc.convert(construct.typeargs[i], rv.id), language, bound - 1, st, tc, extras, newstate, initialBound);
@@ -452,6 +456,7 @@ function randomProgram(expectedType, language, bound, st, tc, extras, state, ini
             }
             let typeFrom = expectedType.from;
             let typeTo = expectedType.to;
+            // Create de Bruijn environment with lambda parameter
             if (extras) {
                 let idx = extras.length;
                 args = extras.map((dbi, i) => new deBroujin(idx - i, dbi.type, dbi.pos));
@@ -462,6 +467,7 @@ function randomProgram(expectedType, language, bound, st, tc, extras, state, ini
 
             st.trackAction(state, rv);
             let newstate = st.transition(state, rv, 0);
+            // Recursively generate lambda body with extended environment
             let body = randomProgram(typeTo, language, bound - 1, st, tc, args, newstate, initialBound);
 
             rv.body = body;
@@ -682,6 +688,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
 
 
     let score;
+    // Initialize beam with random programs or reuse existing state
     if (!state) {
         state = new SynthesizerState(config.beamsize || 10);
         st = state.getTracker();
@@ -703,7 +710,7 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
     state.sortWorklist();
 
 
-
+    // Setup component learning and rejuvenation tracking
     let doComponents = config.componentize == true;
     let rejubudget = 300;
     let lastCacheReset = budget;
@@ -711,19 +718,21 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
     let lowScore = state.lowScore();
     let lastHighLowChange = budget;
 
+    // Main hillclimbing loop: alternate exploration and exploitation
     while (budget > 0) {
-        //console.log(budget, ": scores \t ", workList[0].score, " - ", workList[beamsize - 1].score);
+        // Periodically reset policy cache to adapt to changing landscape
         if (lastCacheReset - budget > 100) {
             st.resetPolicyCache();
             lastCacheReset = budget;
         }
+        // Track score changes for componentization and rejuvenation triggers
         if (highScore != state.highScore() || lowScore != state.lowScore()) {
             lastHighLowChange = budget;
             highScore = state.highScore();
             lowScore = state.lowScore();
         }
+        // Component learning: extract patterns when scores stagnate
         if (doComponents && budget < lastHighLowChange - compStep) {
-            //high and low scores have not changed in a while, so let's create some components and see what happens.
             let comp = state.componentize(language, st);
             if (comp) {
                 comp.pos = language.length;
@@ -731,13 +740,15 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
             }
             console.log(budget, ": Componentized");
             lastHighLowChange = budget;
-            compStep = compStep * 2;
+            compStep = compStep * 2; // Reduce componentization frequency
         }
         tc.reset();
         --budget;
 
-        const probReplace = 0.5; // Math.min(0.5, 1.5*workList[beamsize-1].score);
+        // 50/50 exploration vs exploitation strategy
+        const probReplace = 0.5;
         if (Math.random() < probReplace) {
+            // EXPLORATION: Generate completely new random program
             let adjusted = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
             if (adjusted instanceof RVError) {
                 console.log("randomAndHillClimb1 FAILED")
@@ -746,13 +757,12 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
             score = testProg(adjusted, examples, bound, config, st);
 
             log(3, "After mod ", () => adjusted.toString(), "score", score);
-            //if the score is better than the worst one in the list (list is sorted from best to worst), we replace something.
-            //We want to replace the worst on the list, but if there are multiple worst ones, we want to replace one of them at random.
-            if (score < 1 && (score <= state.lowScore())) { //  || Math.random() < 0.1 
+            // Replace worst beam member if new program is better
+            if (score < 1 && (score <= state.lowScore())) {
                 state.replaceWorst(adjusted, score);
             }
         } else {
-            //We don't replace, we improve.
+            // EXPLOITATION: Mutate existing beam program for local search
             let idx = state.randomIndex();
             let prog = state.workList[idx].prog;
             log(3, () => "original one " + idx + ":" + prog.toString() + " score" + workList[idx].score);
@@ -764,28 +774,28 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
             }
             score = testProg(adjusted, examples, bound, config, st);
             log(3, "After mod ", () => adjusted.toString(), "score", score);
-            if (score < state.workList[idx].score) {// good. The new program is better than the old one. replace
+            // Hillclimbing update: keep if better, occasionally accept worse
+            if (score < state.workList[idx].score) {
                 state.workList[idx] = { prog: adjusted, score: score };
             } else if (score < state.lowScore()) {
                 if (Math.random() < 0.05) {
-                    //   workList[beamsize - 1] = { prog: adjusted, score: score };
+                    // Occasionally accept slightly worse programs for diversity
                 }
-                //bad. The new program is worse than the old one, but better than the worst one in the list.
-                //workList[beamsize - 1] = { prog: adjusted, score: score };
-            } // otherwise just drop the adjusted one.
+            }
         }
 
 
+        // Sort by score with program depth as tiebreaker (prefer simpler)
         function quant(ent) {
             return ent.score * 100 + ent.prog.depth;
         }
 
         state.workList.sort((a, b) => quant(a) - quant(b));
+        // Check for success: score below threshold
         if (state.highScore() < config.threshold) {
-            //All outputs correct enough, we are done!
-            //return an object with the program, the status, the score, and the budget.                    
             return new Result("CORRECT", state.getBestProg(), state.getBestScore(), state.incrementCost(initBudget - budget), state);
         }
+        // Rejuvenation: replace worst half when scheduled
         if (budget == rejuvenate) {
             for (let i = state.beamsize / 2; i < state.beamsize; ++i) {
                 let adjusted = randomProgram(outType, language, bound, st, tc, undefined, undefined, undefined);
@@ -798,8 +808,9 @@ function randomAndHillClimb(language, examples, bound, budget, outType, state, c
             }
             state.workList.sort((a, b) => quant(a) - quant(b));
             rejuvenate = -1;
-            rejubudget = rejubudget * 1.5;
+            rejubudget = rejubudget * 1.5; // Increase interval between rejuvenations
         }
+        // Schedule rejuvenation when beam converges (all same score)
         if (state.highScore() < 1 && state.highScore() == state.lowScore() && rejuvenate < 1) {
             rejuvenate = budget - rejubudget;
         }
@@ -864,14 +875,16 @@ function randomRandom(language, examples, bound, budget, outType, config) {
 }
 
 function fancyRandClone(language, prog, bound, st, tc) {
-    //like simple clone, but doesn't prioritize early arguments.
+    // Depth-dependent mutation: higher bound = lower mutation probability
     let probBound = Math.pow(1.5, -bound);
 
     function traverse(node, lbound, envt, expectedType) {
+        // With probability (1-probBound), continue traversing deeper
         if (Math.random() > probBound) {
 
             if (node instanceof FunN) {
                 let changed = false;
+                // Randomly select one argument to potentially mutate
                 let choice = Math.floor(Math.random() * node.args.length);
                 let newargs = node.args.map((arg, idx) => {
                     if (idx === choice) {
@@ -900,7 +913,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
                     return rv.setState(node.state);
 
                 } else {
-                    //If the argument didn't change, I am going to give it a chance to rewrite this node.
+                    // If no argument changed, give whole node a chance to be replaced
                     let rv = randomProgram(expectedType, language, lbound, st, tc, envt, node.state, lbound);
                     if (rv instanceof RVError) {
 
@@ -914,6 +927,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
             }
             if (node instanceof LambdaN) {
                 let idx = envt.length;
+                // Update de Bruijn environment for lambda nesting
                 let newenvt = envt.map((dbi, i) => new deBroujin(idx - i, dbi.type, dbi.pos));
                 let argtype = node.type ? node.type.from : undefined;
                 newenvt.push(new deBroujin(0, argtype, language.length + envt.length));
@@ -929,6 +943,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
                 }
             }
             if (node instanceof IntN) {
+                // Generate different random value in same range
                 let randval = Math.floor(Math.random() * (node.range[1] - node.range[0] + 1) + node.range[0]);
                 while (randval == node.val) {
                     randval = Math.floor(Math.random() * (node.range[1] - node.range[0] + 1) + node.range[0]);
@@ -943,6 +958,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
 
             return node;
         } else {
+            // Replace entire subtree with new random program
             let rv = randomProgram(expectedType, language, lbound, st, tc, envt, node.state, lbound);
             if (rv instanceof RVError) {
 
@@ -955,6 +971,7 @@ function fancyRandClone(language, prog, bound, st, tc) {
         }
     }
     let rv = traverse(prog, bound, []);
+    // Retry with higher mutation probability if no change occurred
     while (rv == prog) {
         probBound = probBound * 1.5;
         rv = traverse(prog, bound, []);

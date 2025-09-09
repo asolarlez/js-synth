@@ -1,41 +1,39 @@
-import { synthesize, isHole, makeHole, score, numscore, rvError, isError, 
-    isBadResult, deserializeState } from '../src/synlib.js';
+import { synthesize, numscore } from '../src/synlib.js';
 
 /**
  * 
  * A language is a list of language elements, which can be a "fun", an "int", or "lambda".
- * An implementation of a function should return either a regular value (if the computation succeeds), 
- * an rvError(n) if the computation fails and the failure can be attributed to argument n, 
- * or a badResult if some sub-computation produced a badResult. 
- * Functions can assume that all their arguments are good values. 
- * 
- * 
- * Abstraction. We are using the Hole to indicate an abstract value. Holes can have the following attributes:
- * type: {t:("lst", "int", "fun"), rec:, len:N}
- * 
  * 
  */
 let maplanguage = [
     {
+        // name of the primitive ("multiply and add")
+        name: "mad",
+        // indicates that this is a function primitive
+        kind: "fun",
+        // type signature of the primitive. Any identifier ("int", "float", "foo", "bar", etc.) can
+        // be used as a base type; base types don't need to be previously defined.
+        type: "int->int->int->int",
+        // implementation of the primitive. Throwing an error will cause the overall synthesis process to fail,
+        // so instead return a bad result.
+        imp: function (c, a, b) {
+            return c * a + b;
+        }
+    },
+    {
+        name: "N",
+        // "int" is a special keyword indicating that this primitive is an integer constant
+        kind: "int",
+        // range of values (0 to 5 inclusive)
+        range: [0, 5]
+    },
+    {
         name: "map",
         kind: "fun",
+        // Greek letters in the type signature are generic type variables that can be instantiated to any concrete type.
         type: "list[\\alpha]->(\\alpha->\\beta)->list[\\beta]",
         imp: function (lst, f) {
-            if (!(lst instanceof Array)) {
-                return rvError(0);
-            }
-            if (!(f instanceof Function)) {
-                return rvError(1);
-            }
             let rv = lst.map(f);
-            for (let elem of rv) {
-                if (isError(elem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(elem)) {
-                    return elem;
-                }
-            }
             return rv;
         }
     }
@@ -45,65 +43,23 @@ let maplanguage = [
         kind: "fun",
         type: "list[\\alpha]->(\\alpha->\\beta->\\beta)->\\beta->\\beta",
         imp: function (lst, f, init) {
-            if (!(lst instanceof Array)) {
-                return rvError(0);
-            }
-            if (!(f instanceof Function)) {
-                return rvError(1);
-            }
             let acc = init;
             for (let elem of lst) {
                 let skolem = f(elem);
-                if (isError(skolem)) {
-                    return rvError(1);
-                }
-                if (isBadResult(skolem)) {
-                    return skolem;
-                }
-                if (!(skolem instanceof Function)) {
-                    return rvError(1);
-                }
                 acc = skolem(acc);
-                if (isError(acc)) {
-                    return rvError(1);
-                }
-                if (isBadResult(acc)) {
-                    return acc;
-                }
             }
             return acc;
         }
     }
     ,
     {
-        name: "mad",
-        kind: "fun",
-        type: "int->int->int->int",
-        imp: function (c, a, b) {
-            if (!(typeof (c) == 'number')) {
-                return rvError(0);
-            }
-            if (!(typeof (a) == 'number')) {
-                return rvError(1);
-            }
-            if (!(typeof (b) == 'number')) {
-                return rvError(2);
-            }
-            return c * a + b;
-        }
-    }
-    ,
-    {
-        name: "N",
-        kind: "int",
-        range: [0, 5]
-    }
-    ,
-    {
         name: "lambda1",
+        // "lambda" is a special keyword indicating that this primitive is a lambda (anonymous function) expression, needed
+        // for languages that have higher-order functions.
         kind: "lambda",
     }
 ]
+
 let problems = {
     "mapincrement": {
         intypes: [{ kind: "input", name: "x", type: "list[int]" }, { kind: "output", type: "list[int]" }],
@@ -134,8 +90,6 @@ let problems = {
     }
 };
 
-
-
 function runOne(p, verbose, N, config) {
     N = N || 100000
     let problem = problems[p];
@@ -152,41 +106,6 @@ function runOne(p, verbose, N, config) {
     return sol;
 }
 
-
-function r2r(verbose) {
-    let state = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'hillclimb' });      
-    while (state.status == 'INCORRECT') {
-       
-        if (true) {// state.state.highScore() == state.state.lowScore()
-            let tmp = state.state.componentizeGlobal(maplanguage);
-            console.log(tmp);
-            let statestr = state.state.serialize();
-            let sn = deserializeState(statestr, maplanguage);
-            state.state = sn;
-        }
-        
-        state = runOne("2dreduce", verbose, 10000, { initialState: state.state, solver:'hillclimb' });
-    }
-    
-    
-
-}
-
-function testMerge(verbose) {
-    let state = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'hillclimb' }); 
-    let s2 = runOne("2dreduce", verbose, 30000, { beamsize: 10, solver: 'smc' }); 
-    state.state.componentizeGlobal(maplanguage);
-    s2.state.componentizeGlobal(maplanguage);
-    state.merge(s2, 10);
-    while (state.status == 'INCORRECT') {
-        state = runOne("2dreduce", verbose, 10000, { initialState: state.state, solver: 'hillclimb' });
-    }
-
-
-}
-
-
-
 function runAll(verbose) {
     let sols = {};
     for (let p in problems) {
@@ -196,33 +115,5 @@ function runAll(verbose) {
     return sols;
 }
 
-
-function runB() {
-    let examples = [{ in: { x: [1, 2, 3] }, out: [2, 3, 4] },
-    { in: { x: [5, 6, 9] }, out: [6, 7, 10] }];
-    let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 3, 1000);
-    console.log("Solution ", sol.toString());
-    for (let i = 0; i < examples.length; ++i) {
-        console.log("Input: ", examples[i].in.x);
-        console.log("Output:", sol.prog.eval(3, examples[i].in, []));
-        console.log("Target:", examples[i].out);
-    }
-}
-
-
-function run() {
-    let examples = [{ in: { x: [1, 2, 3] }, out: 6 },
-        { in: { x: [5, 6, 9] }, out: 20 },
-        { in: { x: [7, 0, 0] }, out: 7 }];
-    let sol = synthesize([{ kind: "input", name: "x", type: "list[int]" }], examples, maplanguage, numscore, 0.001, 5, 10000);
-    console.log("Solution ", sol.toString());
-    for (let i = 0; i < examples.length; ++i) {
-        console.log("Input: ", examples[i].in.x);
-        console.log("Output:", sol.prog.eval(3, examples[i].in, []));
-        console.log("Target:", examples[i].out);
-    }
-}
-
-
 // Export for Node.js (CommonJS)
-export { maplanguage as language, numscore as scoring, problems as testproblems, run, runAll, runOne, testMerge };
+export { maplanguage as language, numscore as scoring, problems as testproblems, runAll, runOne };
